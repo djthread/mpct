@@ -493,7 +493,9 @@ alias mr='$self --raw'
     {
         $tracks = array();
         for ($i=0; $i<$this->p('num'); $i++) {
-            $tracks[] = $this->getRandomTrack();
+            $tracks[] = $this->params['btRandom']
+                ? $this->getRandomTrackByToplevel()
+                : $this->getRandomTrack();
         }
 
         $this->add($tracks);

@@ -185,7 +185,7 @@ class Mui
                 continue;
             }
             $ret .= '<option value="' . $matches[1] . '"'
-                . ($m['BT'] == $matches[1] ? ' selected' : '')
+                . ($this->m['BT'] == $matches[1] ? ' selected' : '')
                 . '>' . htmlspecialchars($matches[2])
                 . "</option>\n";
         }
