@@ -3,9 +3,11 @@
 /**
  * My mpc wrapper.
  *
- * My randomness isn't me most bad ass. Rather than pulling from the collection 
+ * Automates my music selection by adding random music to my playlist.
+ *
+ * My randomness isn't the most bad ass. Rather than pulling from the collection
  * in a truly random fashion (where every track has an equal chance of being 
- * played, I list the starting directory, choose a dir at random, then a random 
+ * played) I list the starting directory, choose a dir at random, then a random 
  * item from within that directory, going deeper into the tree until I randomly 
  * select a track. This is not truly the most random, but I don't think I'm too 
  * bothered by it.
