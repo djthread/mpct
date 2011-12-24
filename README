@@ -1,5 +1,7 @@
 This is my personal wrapper to mpc, the CLI client for MPD [http://www.musicpd.org/]. It's intended to make adding random music to the playlist as easy as possible.
 
+Be sure and check the top of the script for some things to set. The script is not likely to work for you until you at least empty out the $toplevelWhitelist array.
+
 Usage:
 
    -h,  --hostname       set the target host (default: localhost)
