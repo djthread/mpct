@@ -12,6 +12,11 @@
  * select a track. This is not truly the most random, but I don't think I'm too 
  * bothered by it.
  *
+ * Before this implementation, I was getting teh full list of albums from mpc 
+ * (and caching it) but this approach had its drawbacks.
+ *
+ * I'd love to hear about any and all comments / improvements!
+ *
  * @author thread <thethread@gmail.com>
  * @website http://www.threadbox.net/
  */
@@ -21,25 +26,17 @@ MPCWorker::runFromCLIArguments($argv);
 class MPCWorker
 {
     /**
-     * Top level dirs to pull from when random tracks/albums are selected 
-     * against the full collection. Make this array empty to actually pull from 
-     * the full collection
-     *
-     * @param array
-     */
-    protected $toplevelWhitelist = array(
-        'Ambient', 'Ambient Beats', 'Breakbeat', 'Breakcore, Gabber, and Noise', 'CC', 'Chill Out and Dub',
-        'Classical', 'Compilations', 'DJ Beats', 'Drum \'n Bass', 'Dub Techno', 'Dubstep', 'Electronic and Electro',
-        'Folk', 'Goa', 'House', 'IDM', 'Jazz', 'Metal', 'Minimalistic', 'Pop', 'Post-rock', 'Rap and Hip Hop',
-        'Reggae and Dub', 'Rock', 'Soul', 'Soundtracks', 'Techno', 'Trance', 'Trip-Hop', 'World and New Age',
-    );
-
-    /**
      * Top-level directory map (short code => full path)
      *
-     * The keys will be the short codes usable with the --by-toplevel/-bt flag 
-     * and the ones you will get to pick from if you do not specify one to the 
-     * flag.
+     * The keys will be the short codes usable with the --by-toplevel/-bt flag. 
+     *
+     * ALSO: When you do regular random (not by toplevel) these dirs will also 
+     * be used for randomness. I've left a few that I am not generally 
+     * interested in out of this list, myself If you want to start at the root 
+     * and have random music selected from the entire collection, simply empty
+     * this array.
+     *
+     * @var array
      */
     protected $toplevelMap = array(
         'am' => 'Ambient',
@@ -62,8 +59,6 @@ class MPCWorker
         'ja' => 'Jazz',
         'me' => 'Metal',
         'mi' => 'Minimalistic',
-        'ms' => 'Misc',
-        'nm' => 'Non-music',
         'po' => 'Pop',
         'pr' => 'Post-rock',
         'ra' => 'Rap and Hip Hop',
@@ -96,7 +91,7 @@ class MPCWorker
         $params = array(
             'host'       => 'localhost',
             'port'       => '6600',
-            'mpc'        => '/usr/local/bin/mpc',
+            'mpc'        => '/usr/bin/mpc',
             'count'      => 1,
             'append'     => false,
             'byToplevel' => false,
@@ -107,8 +102,9 @@ class MPCWorker
 
         array_shift($argv);  // take off the script name. useless.
 
-        // my god, this code is gross. it splits up single args into multiple 
-        // for my alfred extension.
+        // I don't like this code much at all. It splits up a single arg into 
+        // multiple ones so my alfred extension works. (Alfred sends all 
+        // parameters, including spaces, as a single argument.)
         $myargs = array();
         foreach ($argv as $av) {
             if ($ss = split(' --', $av)) {
@@ -317,20 +313,35 @@ class MPCWorker
      */
     public function getRandomTrack($dir)
     {
-        // If $dir is /, then we want to pick from the whitelisted toplevels.
-        $cur = $dir == '/' ? $this->toplevelWhitelist[rand(0, count($this->toplevelWhitelist) - 1)] : $dir;
+        $cur = $this->getStartingPoint();
 
         do {
             $dirs = $this->mpc("ls \"$cur\"");
             if (!$dirs) {
                 if ($this->params['debug']) echo "Hit a dead end: $cur\n";
-                $cur = $dir == '/' ? $this->toplevelWhitelist[rand(0, count($this->toplevelWhitelist) - 1)] : $dir;
+                $cur = $this->getStartingPoint();
                 continue;
             }
             $cur = $dirs[rand(0, count($dirs) -  1)];
         } while (!preg_match('/(\.flac|\.mp3|\.ogg)$/i', $cur));
 
         return $cur;
+    }
+
+    /**
+     * Get a directory to start the random recursion into
+     *
+     * @return string
+     */
+    protected function getStartingPoint()
+    {
+        if ($this->toplevelMap) {
+            // If we have toplevels, pick one
+            $vals = array_values($this->toplevelMap);
+            return $vals[rand(0, count($vals) - 1)];
+        } else {
+            return '/';  // Otherwise, just start at the top.
+        }
     }
 
     /**
