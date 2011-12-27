@@ -21,7 +21,56 @@
  * @website http://www.threadbox.net/
  */
 
-MPCWorker::runFromCLIArguments($argv);
+/**
+ * The only configuration in this script is this array.
+ *
+ * Top-level directory map (short code => full path)
+ *
+ * The keys will be the short codes usable with the --by-toplevel/-bt flag. 
+ *
+ * ALSO: When you do regular random (not by toplevel) these dirs will also 
+ * be used for randomness. I've left a few that I am not generally 
+ * interested in out of this list. If you want to start at the root and 
+ * have random music selected from the entire collection, simply empty this
+ * array.
+ */
+$toplevelMap = array(
+    'am' => 'Ambient',
+    'ab' => 'Ambient Beats',
+    'bl' => 'Bootlegs',
+    'bb' => 'Breakbeat',
+    'bc' => 'Breakcore, Gabber, and Noise',
+    'ch' => 'Chill Out and Dub',
+    'cl' => 'Classical',
+    'co' => 'Compilations',
+    'dj' => 'DJ Beats',
+    'db' => 'Drum \'n Bass',
+    'dt' => 'Dub Techno',
+    'du' => 'Dubstep',
+    'el' => 'Electronic and Electro',
+    'fo' => 'Folk',
+    'go' => 'Goa',
+    'ho' => 'House',
+    'id' => 'IDM',
+    'ja' => 'Jazz',
+    'me' => 'Metal',
+    'mi' => 'Minimalistic',
+    'po' => 'Pop',
+    'pr' => 'Post-rock',
+    'ra' => 'Rap and Hip Hop',
+    're' => 'Reggae and Dub',
+    'ro' => 'Rock',
+    'sl' => 'Soul',
+    'so' => 'Soundtracks',
+    'te' => 'Techno',
+    'th' => 'Thread',
+    'tr' => 'Trance',
+    'th' => 'Trip-Hop',
+    'we' => 'Weird',
+    'wo' => 'World and New Age',
+);
+
+MPCWorker::runFromCLIArguments($argv, $toplevelMap);
 
 class MPCWorker
 {
@@ -32,61 +81,41 @@ class MPCWorker
      *
      * ALSO: When you do regular random (not by toplevel) these dirs will also 
      * be used for randomness. I've left a few that I am not generally 
-     * interested in out of this list, myself If you want to start at the root 
-     * and have random music selected from the entire collection, simply empty
-     * this array.
+     * interested in out of this list. If you want to start at the root and 
+     * have random music selected from the entire collection, simply empty this
+     * array.
      *
      * @var array
      */
-    protected $toplevelMap = array(
-        'am' => 'Ambient',
-        'ab' => 'Ambient Beats',
-        'bl' => 'Bootlegs',
-        'bb' => 'Breakbeat',
-        'bc' => 'Breakcore, Gabber, and Noise',
-        'ch' => 'Chill Out and Dub',
-        'cl' => 'Classical',
-        'co' => 'Compilations',
-        'dj' => 'DJ Beats',
-        'db' => 'Drum \'n Bass',
-        'dt' => 'Dub Techno',
-        'du' => 'Dubstep',
-        'el' => 'Electronic and Electro',
-        'fo' => 'Folk',
-        'go' => 'Goa',
-        'ho' => 'House',
-        'id' => 'IDM',
-        'ja' => 'Jazz',
-        'me' => 'Metal',
-        'mi' => 'Minimalistic',
-        'po' => 'Pop',
-        'pr' => 'Post-rock',
-        'ra' => 'Rap and Hip Hop',
-        're' => 'Reggae and Dub',
-        'ro' => 'Rock',
-        'sl' => 'Soul',
-        'so' => 'Soundtracks',
-        'te' => 'Techno',
-        'th' => 'Thread',
-        'tr' => 'Trance',
-        'th' => 'Trip-Hop',
-        'we' => 'Weird',
-        'wo' => 'World and New Age',
-    );
+    protected static $toplevelMap = array();
 
+    /**
+     * Are we pulling music full random style or by a random toplevel?
+     *
+     * @var boolean
+     */
+    protected static $fullRandom = null;
+
+    /**
+     * The parameters, filled from defaults & the command line
+     *
+     * @var array
+     */
     protected $params = array();
-    protected $albums = array();
 
     /**
      * Do yo shit (from the command line arguments)
      *
      * @param array $argv
+     * @param array $toplevelMap
      * @return null
      */
-    public static function runFromCLIArguments($argv)
+    public static function runFromCLIArguments($argv, array $toplevelMap = array())
     {
-        $func = null;
-        $help = false;
+        $func              = null;
+        $help              = false;
+        self::$toplevelMap = $toplevelMap;
+        self::$fullRandom  = ! (bool)$toplevelMap;
 
         $params = array(
             'host'       => 'localhost',
@@ -335,12 +364,22 @@ class MPCWorker
      */
     protected function getStartingPoint()
     {
-        if ($this->toplevelMap) {
-            // If we have toplevels, pick one
-            $vals = array_values($this->toplevelMap);
-            return $vals[rand(0, count($vals) - 1)];
-        } else {
+        // This code is very specific to my situation. I only want to use the 
+        // by-toplevel random for my full collection, but when I'm using my 
+        // local music, it's not sorted quite so well, so in this case, I will 
+        // want to always use full-collection-style random.
+        // if (!self::$fullRandom) {
+        //     if (!$this->mpc('ls "tmp"')) {  // if tmp is there, then it's my full collection.
+        //         self::$fullRandom = true;
+        //     }
+        // }
+
+        if (self::$fullRandom) {
             return '/';  // Otherwise, just start at the top.
+        } else {
+            // If we have toplevels, pick one
+            $vals = array_values(self::$toplevelMap);
+            return $vals[rand(0, count($vals) - 1)];
         }
     }
 
@@ -398,18 +437,18 @@ class MPCWorker
      * @param string $short
      * @return string (the full toplevel dir name)
      */
-    protected function getToplevel($short = null)
+    protected static function getToplevel($short = null)
     {
         if ($short) {
-            if (array_key_exists($short, $this->toplevelMap)) {
-                return $this->toplevelMap[$short];
+            if (array_key_exists($short, self::$toplevelMap)) {
+                return self::$toplevelMap[$short];
             } else {
-                die("Invalid short code: $short\n");
+                return false;
             }
         }
 
         echo "\n";
-        foreach ($this->toplevelMap as $short => $full) {
+        foreach (self::$toplevelMap as $short => $full) {
             echo "    $short  $full\n";
         }
         echo "\n";
@@ -418,9 +457,9 @@ class MPCWorker
         do {
             echo "  > ";
             $choice = trim(fgets($stdin));
-        } while (!array_key_exists($choice, $this->toplevelMap));
+        } while (!array_key_exists($choice, self::$toplevelMap));
         fclose($stdin);
 
-        return $this->toplevelMap[$choice];
+        return self::$toplevelMap[$choice];
     }
 }
