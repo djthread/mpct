@@ -105,6 +105,13 @@ class MPCWorker
     protected static $btRandom = null;
 
     /**
+     * Resulting array of "mpc ls /" just so we don't have to keep asking for it.
+     *
+     * @var array
+     */
+    protected static $rootCache = array();
+
+    /**
      * The parameters, filled from defaults & the command line
      *
      * @var array
@@ -336,18 +343,18 @@ class MPCWorker
      */
     public function getRandomTrack()
     {
-        $cur = null;
-        
-        for ($dirs = $this->lsStartDir();
-          !preg_match('/(\.flac|\.mp3|\.ogg)$/i', $cur);
-          $dirs = $this->lsDir($cur)
-        ) {
+        $dirs = $this->lsStartDir();
+        $cur  = $dirs[rand(0, count($dirs) - 1)];
+
+        while (!preg_match('/(\.flac|\.mp3|\.ogg)$/i', $cur)) {
             if (!$dirs) {
                 if ($this->params['debug']) echo "Hit a dead end: $cur\n";
-                $cur = $dir;
+                $dirs = $this->lsStartDir();
+                $cur  = $dirs[rand(0, count($dirs) - 1)];
                 continue;
             }
-            $cur = $dirs[rand(0, count($dirs) -  1)];
+            $dirs = $this->lsDir($cur);
+            $cur  = $dirs[rand(0, count($dirs) - 1)];
         }
 
         return $cur;
@@ -391,6 +398,13 @@ class MPCWorker
      */
     protected function lsDir($dir)
     {
+        if ($dir == '/') {
+            if (!self::$rootCache) {
+                self::$rootCache = $this->mpc('ls /');
+            }
+            return self::$rootCache;
+        }
+
         return $this->mpc('ls "' . $this->quotefix($dir) . '"');
     }
 
