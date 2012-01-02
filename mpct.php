@@ -90,11 +90,19 @@ class MPCWorker
     protected static $toplevelMap = array();
 
     /**
-     * Are we pulling music full random style or by a random toplevel?
+     * Just the values from $toplevelMap
+     *
+     * @var array
+     */
+    protected static $toplevelDirs = array();
+
+    /**
+     * Are we picking music from only defined toplevels? if false, 
+     * full-collection randomness is used.
      *
      * @var boolean
      */
-    protected static $fullRandom = null;
+    protected static $btRandom = null;
 
     /**
      * The parameters, filled from defaults & the command line
@@ -102,6 +110,19 @@ class MPCWorker
      * @var array
      */
     protected $params = array();
+
+    /**
+     * @param array $params
+     */
+    protected function __construct(array $params)
+    {
+        $this->params = $params;
+
+        $this->params['mpcCmd'] = sprintf('%s -h %s -p %s',
+            $this->params['mpc'],
+            $this->params['host'],
+            $this->params['port']);
+    }
 
     /**
      * Do yo shit (from the command line arguments)
@@ -112,10 +133,11 @@ class MPCWorker
      */
     public static function runFromCLIArguments($argv, array $toplevelMap = array())
     {
-        $func              = null;
-        $help              = false;
-        self::$toplevelMap = $toplevelMap;
-        self::$fullRandom  = ! (bool)$toplevelMap;
+        $func               = null;
+        $help               = false;
+        self::$toplevelMap  = $toplevelMap;
+        self::$toplevelDirs = array_values($toplevelMap);
+        self::$btRandom     = (bool)$toplevelMap;
 
         $params = array(
             'host'       => 'localhost',
@@ -123,7 +145,6 @@ class MPCWorker
             'mpc'        => '/usr/bin/mpc',
             'count'      => 1,
             'append'     => false,
-            'byToplevel' => false,
             'short'      => null,  // short code for "by toplevel"
             'quiet'      => false,
             'debug'      => false,
@@ -187,7 +208,6 @@ class MPCWorker
                 $params['count'] = $arg;
                 break;
             case '--by-toplevel': case '-bt':
-                $params['byToplevel'] = true;
                 if ($arg = array_shift($myargs)) {
                     if (self::getToplevel($arg)) {
                         $params['short'] = $arg;
@@ -235,19 +255,6 @@ class MPCWorker
     }
 
     /**
-     * @param array $params
-     */
-    protected function __construct(array $params)
-    {
-        $this->params = $params;
-
-        $this->params['mpcCmd'] = sprintf('%s -h %s -p %s',
-            $this->params['mpc'],
-            $this->params['host'],
-            $this->params['port']);
-    }
-
-    /**
      * Add some number of random tunes to the playlist. Play.
      *
      * @param array $params
@@ -255,15 +262,9 @@ class MPCWorker
      */
     public function randomTracks()
     {
-        if ($this->params['byToplevel']) {
-            $toplevelDir = self::getToplevel($this->params['short']);
-        } else {
-            $toplevelDir = '/';
-        }
-
         for ($i=0; $i<$this->params['count']; $i++) {
 
-            $track = $this->getRandomTrack($toplevelDir);
+            $track = $this->getRandomTrack();
 
             if ($i == 0 && !$this->params['append']) $this->mpc('clear');
             $this->mpc('add "' . str_replace('"', '\\"', $track) . '"');
@@ -278,14 +279,8 @@ class MPCWorker
      */
     public function randomAlbum()
     {
-        if ($this->params['byToplevel']) {
-            $toplevelDir = self::getToplevel($this->params['short']);
-        } else {
-            $toplevelDir = '/';
-        }
-
         for ($i=0; $i<$this->params['count']; $i++) {
-            $track = $this->getRandomTrack($toplevelDir);
+            $track = $this->getRandomTrack();
             $album = $this->mpc('listall -f %album% "' . str_replace('"', '\\"', $track) . '"');
 
             if (!$album || !$album[0]) {
@@ -337,50 +332,66 @@ class MPCWorker
     /**
      * Returns the full path to a random track
      *
-     * @param string $dir (toplevel to start from)
      * @return null
      */
-    public function getRandomTrack($dir)
+    public function getRandomTrack()
     {
-        $cur = $this->getStartingPoint();
-
-        do {
-            $dirs = $this->mpc("ls \"$cur\"");
+        $cur = null;
+        
+        for ($dirs = $this->lsStartDir();
+          !preg_match('/(\.flac|\.mp3|\.ogg)$/i', $cur);
+          $dirs = $this->lsDir($cur)
+        ) {
             if (!$dirs) {
                 if ($this->params['debug']) echo "Hit a dead end: $cur\n";
-                $cur = $this->getStartingPoint();
+                $cur = $dir;
                 continue;
             }
             $cur = $dirs[rand(0, count($dirs) -  1)];
-        } while (!preg_match('/(\.flac|\.mp3|\.ogg)$/i', $cur));
+        }
 
         return $cur;
     }
 
     /**
-     * Get a directory to start the random recursion into
+     * List the contents of the starting dir in our spider into the collection.
      *
-     * @return string
+     * If by-toplevel is enabled, we will TODO
+     *
+     * @return array
      */
-    protected function getStartingPoint()
+    protected function lsStartDir()
     {
-        // This code is very specific to my situation. I only want to use the 
-        // by-toplevel random for my full collection, but when I'm using my 
-        // local music, it's not sorted quite so well, so in this case, I will 
-        // want to always use full-collection-style random.
-        // if (!self::$fullRandom) {
-        //     if (!$this->mpc('ls "tmp"')) {  // if tmp is there, then it's my full collection.
-        //         self::$fullRandom = true;
-        //     }
-        // }
+        $dirs = array();
 
-        if (self::$fullRandom) {
-            return '/';  // Otherwise, just start at the top.
-        } else {
-            // If we have toplevels, pick one
-            $vals = array_values(self::$toplevelMap);
-            return $vals[rand(0, count($vals) - 1)];
+        if (self::$btRandom) {
+
+            $tl = $this->params['short']
+                ? self::getToplevel($this->params['short'])
+                : self::$toplevelDirs[rand(0, count(self::$toplevelDirs) - 1)];
+
+            if (!$dirs = $this->lsDir($tl)) {
+                // ok, some toplevel is empty or something. no more by-toplevel randomness anymore.
+                if ($this->params['debug']) echo "Toplevel '$tl' is empty or missing. Toplevel dirs are disabled.\n";
+                self::$btRandom = false;
+            }
         }
+
+        return $dirs ?: $this->lsDir('/');
+    }
+
+    /**
+     * List a directory
+     *
+     * If we're doing it by toplevel, and we find a dir that doesn't exist, 
+     * switch by-toplevel off.
+     *
+     * @param string $dir
+     * @return array
+     */
+    protected function lsDir($dir)
+    {
+        return $this->mpc('ls "' . $this->quotefix($dir) . '"');
     }
 
     /**
