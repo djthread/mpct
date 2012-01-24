@@ -223,6 +223,13 @@ class MPCWorker
                     }
                 }
                 break;
+            case '--get-toplevels':
+                // imma keep dis secret. only really needed for the web interface.
+                foreach (self::$toplevelMap as $k => $v) {
+                    echo "$k $v\n";
+                }
+                die();
+                break;
             case '--debug': case '-d':
                 $params['debug'] = true;
                 break;
@@ -239,7 +246,7 @@ class MPCWorker
 
         if ($help || !$func) {
                 echo '
-   -h,  --hostname       set the target host (default: localhost)
+   -h,  --host           set the target host (default: localhost)
    -p,  --port           set the target port (default: 6600)
    -rt, --random-tracks  add random tracks to the playlist
    -10, --ten            play/add 10 random tunes
