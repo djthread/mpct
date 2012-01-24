@@ -25,7 +25,8 @@ session_start();
 
 $actions = array('randomTracks', 'randomAlbums', 'thisAlbum');
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] == 'POST') {
+    if (isset($_POST['action'])) { print_r($_POST);die();}
     if (!array_key_exists('m', $_POST) || !is_array($_POST['m'])) {
         die('Error: m is missing.');
     }
@@ -102,6 +103,7 @@ $m = isset($_SESSION['m']) ? $_SESSION['m'] : array(
 <script type="text/javascript" src="mpct.js"></script>
 <style type="text/css">
 div#message { font-size: 70%; }
+body { text-align: center }
 </style>
 </head>
 <body>
@@ -112,6 +114,7 @@ div#message { font-size: 70%; }
 </div>
 
 <div data-role="content">
+
 <form id="m_form" method="post">
     <label for="m_host" style="display:none">Host</label>
     <select id="m_host" name="m[host]">
@@ -125,16 +128,16 @@ div#message { font-size: 70%; }
     </select>
 
     <fieldset data-role="controlgroup">
-    <input type="radio" id="m_action_randomTracks" name="m[action]" value="randomTracks"<?=
-        $m['action'] == 'randomTracks' ? ' checked' : '' ?>>
+    <input type="radio" id="m_action_randomTracks" name="m[action]" value="randomTracks"<?php
+        echo $m['action'] == 'randomTracks' ? ' checked' : '' ?>>
     <label for="m_action_randomTracks">Random Tracks</label>
 
-    <input type="radio" id="m_action_randomAlbums" name="m[action]" value="randomAlbums"<?=
-        $m['action'] == 'randomAlbums' ? ' checked' : '' ?>>
+    <input type="radio" id="m_action_randomAlbums" name="m[action]" value="randomAlbums"<?php
+        echo $m['action'] == 'randomAlbums' ? ' checked' : '' ?>>
     <label for="m_action_randomAlbums">Random Albums</label>
 
-    <input type="radio" id="m_action_thisAlbum" name="m[action]" value="thisAlbum"<?=
-        $m['action'] == 'thisAlbum' ? ' checked' : '' ?>>
+    <input type="radio" id="m_action_thisAlbum" name="m[action]" value="thisAlbum"<?php
+        echo $m['action'] == 'thisAlbum' ? ' checked' : '' ?>>
     <label for="m_action_thisAlbum">This Album</label>
     </fieldset>
 
@@ -157,14 +160,27 @@ div#message { font-size: 70%; }
     </select>
 
     <label for="m_count" style="display:none">Count</label>
-    <input type="range" name="m[count]" id="m_count" value="<?=$m['count'] ?>" min="1" max="20"  />
+    <input type="range" name="m[count]" id="m_count" value="<?php echo $m['count'] ?>" min="1" max="20"  />
 
-    <input type="checkbox" id="m_append" name="m[append]"<?= $m['append'] ? ' checked' : '' ?>>
+    <input type="checkbox" id="m_append" name="m[append]"<?php echo $m['append'] ? ' checked' : '' ?>>
     <label for="m_append">Append</label>
 
     <input type="submit" id="m_submit" value="  Go  ">
     <div id="message"></div>
 </form>
+
+<div data-role="controlgroup" data-type="horizontal">
+    <a id="a_prev" data-role="button" data-icon="arrow-l">Prev</a>
+    <a id="a_toggle" data-role="button">Toggle</a>
+    <a id="a_next" data-role="button" data-icon="arrow-r">Next</a>
+</div>
+
+<ul data-role="listview" data-inset="true">
+    <li role="header" data-role="list-divider">Playlist</li>
+    <li>foo</li>
+    <li>foo</li>
+</ul>
+
 </div>
 
 </div>

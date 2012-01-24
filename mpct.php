@@ -156,6 +156,7 @@ class MPCWorker
             'append'     => false,
             'short'      => null,  // short code for "by toplevel"
             'quiet'      => false,
+            'raw'        => null,  // array of args for mpc
             'debug'      => false,
         );
 
@@ -192,11 +193,19 @@ class MPCWorker
             case '--mpc':
                 $params['mpc'] = array_shift($myargs);
                 break;
+            case '--random-tracks': case '-rt':
+                $func = 'randomTracks';
+                break;
             case '--random-album': case '-ra':
                 $func = 'randomAlbum';
                 break;
             case '--this-album': case '-ta':
                 $func = 'playThisAlbum';
+                break;
+            case '--raw':
+                $func = 'raw';
+                $params['raw'] = implode(' ', $myargs);
+                $myargs = array();
                 break;
             case '--append': case '-a':
                 $params['append'] = true;
@@ -204,9 +213,6 @@ class MPCWorker
             case '--ten': case '-10':
                 $func = 'randomTracks';
                 $params['count'] = 10;
-                break;
-            case '--random-tracks': case '-rt':
-                $func = 'randomTracks';
                 break;
             case '--count': case '-c':
                 if (!($arg = array_shift($myargs))
@@ -256,6 +262,7 @@ DJ Thread's MPC Tool, v$version
    -rt, --random-tracks  add random tracks to the playlist
    -ra, --random-album   play/add random album
    -ta, --this-album     play/add the album from which the current song is
+        --raw            The rest of the command line will go straight to mpc
    -bt, --by-toplevel    ask which toplevel dir to use (a short code CAN follow)
    -10, --ten            play/add 10 random tunes
    -c,  --count          how many tracks to add (default: 10)
@@ -333,6 +340,16 @@ DJ Thread's MPC Tool, v$version
         $this->addAlbum($status[0]);
         if (!$this->params['append']) $this->mpc('play 1');
         if (!$this->params['quiet']) $this->echoStatus();
+    }
+
+    /**
+     * Execute a raw command with mpc
+     *
+     * @return null
+     */
+    public function raw()
+    {
+        $this->mpc($this->params['raw'], false, true);
     }
 
     /**
