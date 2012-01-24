@@ -1,7 +1,7 @@
 DJ Thread's MPC Tool
 --------------------
 
-This is my personal wrapper to mpc, the CLI client for (MPD)[http://www.musicpd.org/]. It's intended to make adding random music to the playlist as easy as possible.
+This is my personal wrapper to mpc, the CLI client for [MPD](http://www.musicpd.org/). It's intended to make adding random music to the playlist as easy as possible.
 
 Be sure and check the top of the script. You'll want to change the $toplevelMap array to work with your library. If you like the idea of using the -bt flag to get a random artist/album from within a certain directory, define them here with the shortcodes you'd like to use to refer to them. (Note that full-collection randomness will still only use the dirs defined here.)
 
