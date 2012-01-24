@@ -74,6 +74,8 @@ MPCWorker::runFromCLIArguments($argv, $toplevelMap);
 
 class MPCWorker
 {
+    const VERSION = '0.01';
+
     /**
      * Top-level directory map (short code => full path)
      *
@@ -245,22 +247,25 @@ class MPCWorker
         }
 
         if ($help || !$func) {
-                echo '
+            $version = self::VERSION;
+            echo "
+DJ Thread's MPC Tool, v$version
+
    -h,  --host           set the target host (default: localhost)
    -p,  --port           set the target port (default: 6600)
    -rt, --random-tracks  add random tracks to the playlist
-   -10, --ten            play/add 10 random tunes
-   -bt, --by-toplevel    ask which toplevel dir to use (a short code CAN follow)
    -ra, --random-album   play/add random album
-   -c,  --count          how many tracks to add (default: 10)
    -ta, --this-album     play/add the album from which the current song is
+   -bt, --by-toplevel    ask which toplevel dir to use (a short code CAN follow)
+   -10, --ten            play/add 10 random tunes
+   -c,  --count          how many tracks to add (default: 10)
    -a,  --append         add tunage, peserving the current playlist
         --mpc            full path to mpc executable
    -d,  --debug          echo debugging information
    -q,  --quiet          sssshhh
    -?,  --help           this.
 
-';
+";
             exit;
         }
 
