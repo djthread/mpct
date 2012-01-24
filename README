@@ -6,7 +6,7 @@ If you prefer all your randomness to be across the full collection, simply empty
 
 Usage:
 
-   -h,  --hostname       set the target host (default: localhost)
+   -h,  --host           set the target host (default: localhost)
    -p,  --port           set the target port (default: 6600)
    -rt, --random-tracks  add random tracks to the playlist
    -10, --ten            play/add 10 random tunes
@@ -19,3 +19,8 @@ Usage:
    -d,  --debug          echo debugging information
    -q,  --quiet          sssshhh
    -?,  --help           this.
+
+
+Web Interface!
+
+Yeah, there is a jQuery Mobile web interface for this. Simply make the files in the web/ directory web accessible and configure a couple things atop index.php !
