@@ -27,4 +27,4 @@ Web Interface!
 
 Yeah, there is a jQuery Mobile web interface for this. Simply make the files in the web/ directory web accessible and configure a couple things atop index.php !
 
-![jQuery Mobile Web Interface](https://github.com/djthread/mpct/blob/master/Web%20UI%20Screenshot.png?raw=true)
+.. image:: https://github.com/djthread/mpct/blob/master/Web%20UI%20Screenshot.png?raw=true
