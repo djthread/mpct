@@ -164,18 +164,18 @@ class MPCWorker
         // parameters, including spaces, as a single argument.)
         $myargs = array();
         foreach ($argv as $av) {
-            if ($ss = split(' --', $av)) {
+            if (($ss = explode(' --', $av)) && count($ss) > 1) {
                 $myargs[] = $ss[0];
                 for ($i=1; $i<count($ss); $i++) {
                     $myargs[] = "--{$ss[$i]}";
                 }
-            } else if ($ss = split(' -', $av)) {
+            } else if (($ss = explode(' -', $av)) && count($ss) > 1) {
                 $myargs[] = $ss[0];
                 for ($i=1; $i<count($ss); $i++) {
                     $myargs[] = "-{$ss[$i]}";
                 }
             } else {
-                $myargs = $av;
+                $myargs[] = $av;
             }
         }
 
