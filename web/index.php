@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if (!isset($m['count']) || !ctype_digit($m['count']) || $m == 0 || $m > 99) {
             $count = 1;
         } else $count = $m['count'];
-        $params .= ' -c ' . $m['count'];
+        $params .= " -c $count";
     }
 
     if (isset($m['BT']) && $m['BT'] != '00' && preg_match('/^[a-z0-9]{2}$/', $m['BT'])) {
