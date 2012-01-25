@@ -29,15 +29,23 @@ $(document).ready(function() {
         });
     });
 
-    // $('#a_prev #a_toggle #a_next').click(function(e) {
-    $('#a_prev').click(function(e) {
-        alert('yo');
-        e.preventDefault();
-        $.ajax({
-            type: 'POST',
-            data: 'action=' + $(e.target).attr('id'),
-            // success: function(data) { updateMessage(data); }
-            success: function(data) {console.log(data);}
-        });
-    });
+    var action, actions = ['prev', 'toggle', 'next'];
+
+    for (action in actions) {
+        action = actions[action];
+        $('#a_' + action).click(function () {
+            var c_action = action;
+            return function (e) {
+                alert('m[host]=' + $('#m_host').val() +
+                        '&m[action]=' + c_action);
+                e.preventDefault();
+                $.ajax({
+                    type: 'POST',
+                    data: 'm[host]=' + $('#m_host').val() +
+                        '&m[action]=' + c_action,
+                    success: function (x) { updateMessage(x); }
+                });
+            };
+        }());
+    }
 });

@@ -6,91 +6,15 @@
  * @website http://www.threadbox.net/
  */
 
-// BEGIN CONFIG  ---------------------------------
+include('config.php');
+include('Mui.php');
 
-// Full path location of the mpct script
-$mpct  = '/home/thread/apps/mpct/mpct.php';
+$mui = new Mui(array(
+    'mpct'  => $mpct,
+    'hosts' => $hosts,
+));
 
-// Array of servers to allow switching between
-// Note: adding ":6601" etc for a non-standard port is allowed.
-$hosts = array(
-    'therver',
-    'thair'
-);
-
-// -----------------------------------------------
-
-
-session_start();
-
-$actions = array('randomTracks', 'randomAlbums', 'thisAlbum');
-
-if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] == 'POST') {
-    if (isset($_POST['action'])) { print_r($_POST);die();}
-    if (!array_key_exists('m', $_POST) || !is_array($_POST['m'])) {
-        die('Error: m is missing.');
-    }
-    $m = $_POST['m'];
-
-    if (!isset($m['host']) || !in_array($m['host'], $hosts)) {
-        die('Error: invalid host.');
-    } else if (!isset($m['action'])) {
-        die('Error: invalid action.');
-    }
-
-    switch ($m['action']) {
-    case 'randomTracks':
-        $params = '--random-tracks';
-        break;
-    case 'randomAlbums':
-        $params = '--random-album';
-        break;
-    case 'thisAlbum':
-        $params = '--this-album';
-        break;
-    default:
-        die('Error: invalid action.');
-    }
-
-    if (preg_match('/^(.+):(\d+)$/', $m['host'], $matches)) {
-        $params = "-h {$matches[1]} -p {$matches[2]} $params";
-    } else {
-        $params = "-h {$m['host']} $params";
-    }
-
-    if ($m['action'] != 'thisAlbum') {
-        if (!isset($m['count']) || !ctype_digit($m['count']) || $m == 0 || $m > 99) {
-            $count = 1;
-        } else $count = $m['count'];
-        $params .= " -c $count";
-    }
-
-    if (isset($m['BT']) && $m['BT'] != '00' && preg_match('/^[a-z0-9]{2}$/', $m['BT'])) {
-        $params .= ' -bt ' . $m['BT'];
-    }
-
-    if (isset($m['append']) && $m['append']) {
-        $params .= ' -a';
-    }
-
-    // save it for later !
-    $_SESSION['m'] = $m;
-
-    $dispcmd = preg_replace('/^.*\//', '.../', $mpct) . " $params";
-    echo "\$ $dispcmd\n";
-
-    $cmd = "$mpct $params";
-    echo `$cmd`;
-    die();
-}
-
-$m = isset($_SESSION['m']) ? $_SESSION['m'] : array(
-    'host'   => $hosts[0],
-    'action' => 'randomTracks',
-    'BT'     => null,
-    'count'  => 5,
-    'append' => false
-);
+$mui->maybeHandlePost();
 
 ?>
 <html>
@@ -118,13 +42,7 @@ body { text-align: center }
 <form id="m_form" method="post">
     <label for="m_host" style="display:none">Host</label>
     <select id="m_host" name="m[host]">
-    <?php
-    foreach ($hosts as $host) {
-        echo "\t<option"
-            . ($m['host'] == $host ? ' selected' : '')
-            .">$host</option>\n";
-    }
-    ?>
+        <?php echo $mui->getHostOptionTags(); ?>
     </select>
 
     <fieldset data-role="controlgroup">
@@ -175,10 +93,14 @@ body { text-align: center }
     <a id="a_next" data-role="button" data-icon="arrow-r">Next</a>
 </div>
 
+
 <ul data-role="listview" data-inset="true">
     <li role="header" data-role="list-divider">Playlist</li>
-    <li>foo</li>
-    <li>foo</li>
+<?php
+    foreach (split("\n", trim(`$mpct --raw playlist`)) as $line) {
+        echo '<li>' . htmlspecialchars($line) . "</li>\n";
+    }
+?>
 </ul>
 
 </div>
@@ -186,3 +108,15 @@ body { text-align: center }
 </div>
 </body>
 </html>
+<?php
+function mpct($params) {
+    global $host, $mpct;
+
+    if (preg_match('/^(.+):(\d+)$/', $host, $matches)) {
+        $hostparam = "-h {$matches[1]} -p {$matches[2]} $params";
+    } else {
+        $hostparam = "-h $host $params";
+    }
+
+    return `$mpct $hostparam $params`;
+}
