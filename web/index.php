@@ -21,10 +21,10 @@ $mui->maybeHandlePost();
 <head>
 <title>mpct</title>
 <meta name="viewport" content="width=device-width, initial-scale=1"> 
-<link rel="stylesheet" href="http://code.jquery.com/mobile/1.0/jquery.mobile-1.0.min.css" />
-<script type="text/javascript" src="http://code.jquery.com/jquery-1.7.1.min.js"></script>
-<script type="text/javascript" src="http://code.jquery.com/mobile/1.0/jquery.mobile-1.0.min.js"></script>
+<link rel="stylesheet" href="jquery.mobile-1.0.min.css" />
+<script type="text/javascript" src="jquery-1.7.1.min.js"></script>
 <script type="text/javascript" src="mpct.js"></script>
+<script type="text/javascript" src="jquery.mobile-1.0.min.js"></script>
 <style type="text/css">
 div#message { font-size: 70%; }
 body { text-align: center }
@@ -80,7 +80,7 @@ body { text-align: center }
 </div>
 
 
-<ul data-role="listview" data-inset="true">
+<ul id="pl" data-role="listview" data-inset="true">
     <li role="header" data-role="list-divider">Playlist</li>
     <?php echo $mui->getPlaylistLis(); ?>
 </ul>

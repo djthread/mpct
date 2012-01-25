@@ -23,20 +23,6 @@ class Mui
     protected $hosts;
 
     /**
-     * The available actions
-     *
-     * @var array
-     */
-    protected $actions = array(
-        'randomTracks',
-        'randomAlbums',
-        'thisAlbum',
-        'prev',
-        'toggle',
-        'next'
-    );
-
-    /**
      * The host being targeted
      *
      * @var string
@@ -97,6 +83,8 @@ class Mui
         if (!array_key_exists('m', $_POST) || !is_array($_POST['m'])) {
             $this->halt('Error: invalid post.');
         }
+
+        $mOld    = $this->m;
         $this->m = $_POST['m'];
 
         if (!isset($this->m['host']) || !in_array($this->m['host'], $this->hosts)) {
@@ -118,31 +106,50 @@ class Mui
             $params = '--raw toggle'; break;
         case 'next':
             $params = '--raw next'; break;
+        case 'pl':
+            $params = '--raw play'; break;
         default:
             $this->halt('Error: invalid action.');
         }
 
         if (in_array($this->m['action'], array('randomTracks', 'randomAlbums'))) {
-            if (!isset($this->m['count']) || !ctype_digit($this->m['count']) || $this->m == 0 || $this->m > 99) {
-                $count = 1;
-            } else $count = $this->m['count'];
+            $count = 1;
+            if (isset($this->m['count'])
+              && ctype_digit($this->m['count'])
+              && $this->m['count'] > 0
+              && $this->m['count'] < 99
+            ) {
+                $count = $this->m['count'];
+            }
             $params .= " -c $count";
+
+            if (isset($this->m['BT']) && $this->m['BT'] != '00' && preg_match('/^[a-z0-9]{2}$/', $this->m['BT'])) {
+                $params .= ' -bt ' . $this->m['BT'];
+            }
         }
 
-        if (isset($this->m['BT']) && $this->m['BT'] != '00' && preg_match('/^[a-z0-9]{2}$/', $this->m['BT'])) {
-            $params .= ' -bt ' . $this->m['BT'];
+        if (in_array($this->m['action'], array('randomTracks', 'randomAlbums', 'thisAlbum'))) {
+            if (isset($this->m['append']) && $this->m['append']) {
+                $params .= ' -a';
+            }
         }
 
-        if (isset($this->m['append']) && $this->m['append']) {
-            $params .= ' -a';
+        if ($this->m['action'] == 'pl') {
+            if (!isset($this->m['i']) || !ctype_digit($this->m['i'])) $this->halt('invalid i');
+            $params .= ' ' . $this->m['i'];
         }
 
-        // save it for later !
+        // save it for later, but maybe not everything.
+        $actionsToPersist = array('randomTracks', 'randomAlbums', 'thisAlbum');
+        if (!in_array($this->m['action'], $actionsToPersist)) $this->m['action'] = $mOld['action'];
+        if (!$this->m['count'])                               $this->m['count']  = $mOld['count'];
+
         $_SESSION['m'] = $this->m;
 
-        echo $this->fancy($params);
-
-        $this->halt();
+        $this->halt(array(
+            'msg' => $this->fancy($params),
+            'pl'  => $this->getPlaylistLis(),
+        ));
     }
 
     /**
@@ -155,7 +162,7 @@ class Mui
         $ret = '';
         foreach ($this->hosts as $host) {
             $ret .= "\t<option"
-                  . ($this->host == $host ? ' selected' : '')
+                  . ($this->m['host'] == $host ? ' selected' : '')
                   .">$host</option>\n";
         }
         return $ret;
@@ -193,8 +200,11 @@ class Mui
     public function getPlaylistLis()
     {
         $ret = '';
+        $i   = 1;
         foreach (split("\n", $this->mpct('--raw playlist')) as $line) {
-            $ret .= '<li>' . htmlspecialchars($line) . "</li>\n";
+            $ret .= '<li><a class="pli" href="?m[action]=pl&m[i]=' . $i . '">'
+                  . htmlspecialchars($line) . "</a></li>\n";
+            $i++;
         }
         return $ret;
     }
@@ -244,14 +254,20 @@ class Mui
         return '$ ' . preg_replace('/^.*\//', '.../', $cmd) . "\n"
             . $out;
     }
+
     /**
      * die
      *
-     * @param string $msg
+     * @param string|array $msg
      * @return null
      */
     protected function halt($msg)
     {
-        die($msg);
+        // TODO: include playlist
+        die(is_array($msg) ? json_encode($msg) : json_encode(array('msg' => $msg)));
     }
+}
+
+function pre_r($in) {
+    echo '<pre>' . print_r($in, true) . '</pre>';
 }
