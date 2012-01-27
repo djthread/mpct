@@ -47,44 +47,30 @@ body { text-align: center }
 
     <fieldset data-role="controlgroup">
     <input type="radio" id="m_action_randomTracks" name="m[action]" value="randomTracks"<?php
-        echo $m['action'] == 'randomTracks' ? ' checked' : '' ?>>
+        echo $mui->m('action') == 'randomTracks' ? ' checked' : '' ?>>
     <label for="m_action_randomTracks">Random Tracks</label>
 
     <input type="radio" id="m_action_randomAlbums" name="m[action]" value="randomAlbums"<?php
-        echo $m['action'] == 'randomAlbums' ? ' checked' : '' ?>>
+        echo $mui->m('action') == 'randomAlbums' ? ' checked' : '' ?>>
     <label for="m_action_randomAlbums">Random Albums</label>
 
     <input type="radio" id="m_action_thisAlbum" name="m[action]" value="thisAlbum"<?php
-        echo $m['action'] == 'thisAlbum' ? ' checked' : '' ?>>
+        echo $mui->m('action') == 'thisAlbum' ? ' checked' : '' ?>>
     <label for="m_action_thisAlbum">This Album</label>
     </fieldset>
 
     <select id="m_BT" name="m[BT]">
-    <?php
-        $lines = array_merge(
-            array('00 All Genres'),
-            split("\n", trim(`$mpct --get-toplevels`))
-        );
-        foreach ($lines as $line) {
-            if (!preg_match('/^([a-z0-9]{2}) (.+)$/', $line, $matches)) {
-                continue;
-            }
-            echo '<option value="' . $matches[1] . '"'
-                . ($m['BT'] == $matches[1] ? ' selected' : '')
-                . '>' . htmlspecialchars($matches[2])
-                . '</option>';
-        }
-    ?>
+        <?php echo $mui->getBTOptionTags(); ?>
     </select>
 
     <label for="m_count" style="display:none">Count</label>
-    <input type="range" name="m[count]" id="m_count" value="<?php echo $m['count'] ?>" min="1" max="20"  />
+    <input type="range" name="m[count]" id="m_count" value="<?php echo $mui->m('count'); ?>" min="1" max="20">
 
-    <input type="checkbox" id="m_append" name="m[append]"<?php echo $m['append'] ? ' checked' : '' ?>>
+    <input type="checkbox" id="m_append" name="m[append]"<?php echo $mui->m('append') ? ' checked' : ''; ?>>
     <label for="m_append">Append</label>
 
     <input type="submit" id="m_submit" value="  Go  ">
-    <div id="message"></div>
+    <div id="message"><pre><?php echo $mui->fancy('--raw'); ?></pre></div>
 </form>
 
 <div data-role="controlgroup" data-type="horizontal">
@@ -96,11 +82,7 @@ body { text-align: center }
 
 <ul data-role="listview" data-inset="true">
     <li role="header" data-role="list-divider">Playlist</li>
-<?php
-    foreach (split("\n", trim(`$mpct --raw playlist`)) as $line) {
-        echo '<li>' . htmlspecialchars($line) . "</li>\n";
-    }
-?>
+    <?php echo $mui->getPlaylistLis(); ?>
 </ul>
 
 </div>
@@ -108,15 +90,3 @@ body { text-align: center }
 </div>
 </body>
 </html>
-<?php
-function mpct($params) {
-    global $host, $mpct;
-
-    if (preg_match('/^(.+):(\d+)$/', $host, $matches)) {
-        $hostparam = "-h {$matches[1]} -p {$matches[2]} $params";
-    } else {
-        $hostparam = "-h $host $params";
-    }
-
-    return `$mpct $hostparam $params`;
-}

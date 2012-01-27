@@ -72,8 +72,6 @@ class Mui
 
         session_start();
 
-        $this->host = isset($_SESSION['host']) ? $_SESSION['host'] : $this->hosts[0];
-
         $this->m = isset($_SESSION['m']) ? $_SESSION['m'] : array(
             'host'   => $hosts[0],
             'action' => 'randomTracks',
@@ -99,16 +97,15 @@ class Mui
         if (!array_key_exists('m', $_POST) || !is_array($_POST['m'])) {
             $this->halt('Error: invalid post.');
         }
-        $m = $_POST['m'];
+        $this->m = $_POST['m'];
 
-        if (!isset($m['host']) || !in_array($m['host'], $hosts)) {
+        if (!isset($this->m['host']) || !in_array($this->m['host'], $this->hosts)) {
             $this->halt('Error: invalid host.');
-        } else if (!isset($m['action'])) {
+        } else if (!isset($this->m['action'])) {
             $this->halt('Error: invalid action.');
         }
-        $this->host = $m['host'];
 
-        switch ($m['action']) {
+        switch ($this->m['action']) {
         case 'randomTracks':
             $params = '--random-tracks'; break;
         case 'randomAlbums':
@@ -125,29 +122,26 @@ class Mui
             $this->halt('Error: invalid action.');
         }
 
-        if (in_array($m['action'], array('randomTracks', 'randomAlbums'))) {
-            if (!isset($m['count']) || !ctype_digit($m['count']) || $m == 0 || $m > 99) {
+        if (in_array($this->m['action'], array('randomTracks', 'randomAlbums'))) {
+            if (!isset($this->m['count']) || !ctype_digit($this->m['count']) || $this->m == 0 || $this->m > 99) {
                 $count = 1;
-            } else $count = $m['count'];
+            } else $count = $this->m['count'];
             $params .= " -c $count";
         }
 
-        if (isset($m['BT']) && $m['BT'] != '00' && preg_match('/^[a-z0-9]{2}$/', $m['BT'])) {
-            $params .= ' -bt ' . $m['BT'];
+        if (isset($this->m['BT']) && $this->m['BT'] != '00' && preg_match('/^[a-z0-9]{2}$/', $this->m['BT'])) {
+            $params .= ' -bt ' . $this->m['BT'];
         }
 
-        if (isset($m['append']) && $m['append']) {
+        if (isset($this->m['append']) && $this->m['append']) {
             $params .= ' -a';
         }
 
         // save it for later !
-        $_SESSION['m'] = $m;
+        $_SESSION['m'] = $this->m;
 
-        $dispcmd = preg_replace('/^.*\//', '.../', $mpct) . " $params";
-        echo "\$ $dispcmd\n";
+        echo $this->fancy($params);
 
-        $cmd = "$mpct $params";
-        echo `$cmd`;
         $this->halt();
     }
 
@@ -168,6 +162,44 @@ class Mui
     }
 
     /**
+     * Build and return the toplevel option tags
+     *
+     * @return string
+     */
+    public function getBTOptionTags()
+    {
+        $ret = '';
+        $lines = array_merge(
+            array('00 All Genres'),
+            split("\n", $this->mpct('--get-toplevels'))
+        );
+        foreach ($lines as $line) {
+            if (!preg_match('/^([a-z0-9]{2}) (.+)$/', $line, $matches)) {
+                continue;
+            }
+            $ret .= '<option value="' . $matches[1] . '"'
+                . ($m['BT'] == $matches[1] ? ' selected' : '')
+                . '>' . htmlspecialchars($matches[2])
+                . "</option>\n";
+        }
+        return $ret;
+    }
+
+    /**
+     * Build and return the playlist li tags
+     *
+     * @return string
+     */
+    public function getPlaylistLis()
+    {
+        $ret = '';
+        foreach (split("\n", $this->mpct('--raw playlist')) as $line) {
+            $ret .= '<li>' . htmlspecialchars($line) . "</li>\n";
+        }
+        return $ret;
+    }
+
+    /**
      * Get the last posted value for a given key.
      *
      * @param string $key
@@ -178,6 +210,40 @@ class Mui
         return array_key_exists($key, $this->m) ? $this->m[$key] : null;
     }
 
+    /**
+     * Call mpct. We'll figure out the host part...
+     *
+     * @param string $params
+     * @param boolean $fancy
+     * @return string
+     */
+    public function mpct($params, $fancy = false) {
+
+        if (preg_match('/^(.+):(\d+)$/', $this->m['host'], $matches)) {
+            $hostparam = "-h {$matches[1]} -p {$matches[2]}";
+        } else {
+            $hostparam = "-h {$this->m['host']}";
+        }
+
+        $cmd = "{$this->mpct} $hostparam $params";
+        $out = trim(`$cmd`);
+
+        return $fancy ? array($cmd, $out) : $out;
+    }
+
+    /**
+     * Execute mpct with the parameters and return some nice output
+     *
+     * @param string $params
+     * @return string
+     */
+    public function fancy($params)
+    {
+        list($cmd, $out) = $this->mpct($params, true);
+
+        return '$ ' . preg_replace('/^.*\//', '.../', $cmd) . "\n"
+            . $out;
+    }
     /**
      * die
      *

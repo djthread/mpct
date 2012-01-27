@@ -36,8 +36,6 @@ $(document).ready(function() {
         $('#a_' + action).click(function () {
             var c_action = action;
             return function (e) {
-                alert('m[host]=' + $('#m_host').val() +
-                        '&m[action]=' + c_action);
                 e.preventDefault();
                 $.ajax({
                     type: 'POST',
