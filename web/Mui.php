@@ -59,7 +59,7 @@ class Mui
         session_start();
 
         $this->m = isset($_SESSION['m']) ? $_SESSION['m'] : array(
-            'host'   => $hosts[0],
+            'host'   => $this->hosts[0],
             'action' => 'randomTracks',
             'BT'     => null,
             'count'  => 5,
