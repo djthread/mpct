@@ -165,20 +165,9 @@ class MPCWorker
         // I don't like this code much at all. It splits up a single arg into 
         // multiple ones so my alfred extension works. (Alfred sends all 
         // parameters, including spaces, as a single argument.)
-        $myargs = array();
         foreach ($argv as $av) {
-            if (($ss = explode(' --', $av)) && count($ss) > 1) {
-                $myargs[] = $ss[0];
-                for ($i=1; $i<count($ss); $i++) {
-                    $myargs[] = "--{$ss[$i]}";
-                }
-            } else if (($ss = explode(' -', $av)) && count($ss) > 1) {
-                $myargs[] = $ss[0];
-                for ($i=1; $i<count($ss); $i++) {
-                    $myargs[] = "-{$ss[$i]}";
-                }
-            } else {
-                $myargs[] = $av;
+            foreach (split(' ', $av) as $c) {
+                $myargs[] = $c;
             }
         }
 
