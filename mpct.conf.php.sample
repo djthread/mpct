@@ -1,0 +1,47 @@
+<?php
+$p = array(
+	'mpc'        => '/usr/local/bin/mpc',
+	'latestRoot' => '/Volumes/storage/music/tmp/stage2',
+	'mpdRoot'    => '/Volumes/storage/music',
+    'modes'      => array(
+		'whole' => array(
+			'latestRoot' => '/Volumes/storage/music',
+			'deep'       => 3,
+			'num'        => 200,
+		),
+    ),
+);
+
+$map = array(
+    'am' => 'Ambient',
+    'ab' => 'Ambient Beats',
+    'bb' => 'Breakbeat',
+    'bc' => 'Breakcore, Gabber, and Noise',
+    'ch' => 'Chill Out and Dub',
+    'cl' => 'Classical',
+    'co' => 'Compilations',
+    'dj' => 'DJ Beats',
+    'db' => 'Drum \'n Bass',
+    'dt' => 'Dub Techno',
+    'du' => 'Dubstep',
+    'el' => 'Electronic and Electro',
+    'fo' => 'Folk',
+    'go' => 'Goa',
+    'ho' => 'House',
+    'id' => 'IDM',
+    'ja' => 'Jazz',
+    'me' => 'Metal',
+    'mi' => 'Minimalistic',
+    'po' => 'Pop',
+    'pr' => 'Post-rock',
+    'ra' => 'Rap and Hip Hop',
+    're' => 'Reggae and Dub',
+    'ro' => 'Rock',
+    'sl' => 'Soul',
+    'so' => 'Soundtracks',
+    'te' => 'Techno',
+    'tr' => 'Trance',
+    'th' => 'Trip-Hop',
+    'we' => 'Weird',
+    'wo' => 'World and New Age',
+);
