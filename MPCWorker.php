@@ -283,7 +283,7 @@ class MPCWorker
                 $params['func'] = 'help';
                 break;
             default:
-                die("what?: $arg");
+                die("what?: $arg\n");
             }
         }
 
