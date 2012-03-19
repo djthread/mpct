@@ -566,11 +566,16 @@ General:
             }
         }
 
-        if ($this->params['action'] == 'mpc') {
-            $this->echoStatus();
-        }
+        // if ($this->params['action'] == 'mpc') {
+        //     $this->echoStatus();
+        // }
     }
 
+    /**
+     * Reload the latestRoot location... wait for it.
+     *
+     * @return null
+     */
     protected function refreshMpd()
     {
         $it = str_replace($this->params['mpdRoot'] . '/', '',
