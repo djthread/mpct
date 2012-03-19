@@ -148,6 +148,7 @@ class MPCWorker
         self::$btRandom     = (bool)self::$toplevelMap;
 
         $params = array();
+        $myargs = array();
 
         array_shift($argv);  // take off the script name. useless.
 
@@ -281,7 +282,7 @@ class MPCWorker
 
         $final = array_merge(self::$paramDefaults, $configFileParams);
 
-        if (array_key_exists('modes', $final) && $params['mode']) {
+        if (array_key_exists('modes', $final) && isset($params['mode'])) {
             $final = array_merge($final, $final['modes'][$params['mode']]);
         }
 
