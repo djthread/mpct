@@ -140,8 +140,11 @@ class MPCWorker
      */
     public static function runFromCLIArguments($argv)
     {
-        @include 'mpct.conf.php';
-        @include '~/.mpct.conf.php';
+        foreach (array('mpct.conf.php', '~/.mpct.conf.php') as $f) {
+            if (file_exists($f)) {
+                include $f;
+            }
+        }
 
         self::$toplevelMap  = isset($map) && is_array($map) ? $map : array();
         self::$toplevelDirs = array_values(self::$toplevelMap);
@@ -282,8 +285,14 @@ class MPCWorker
 
         $final = array_merge(self::$paramDefaults, $configFileParams);
 
-        if (array_key_exists('modes', $final) && isset($params['mode'])) {
-            $final = array_merge($final, $final['modes'][$params['mode']]);
+        if (array_key_exists('mode', $params)) {
+            if (array_key_exists('modes', $final)
+              && array_key_exists($params['mode'], $final['modes'])
+            ) {
+                $final = array_merge($final, $final['modes'][$params['mode']]);
+            } else {
+                die("Couldn't find mode: {$params['mode']}\n");
+            }
         }
 
         // command-line params last !
@@ -571,10 +580,9 @@ General:
         do {
             echo '.';
             sleep(1);
-            list($in, $out) = $this->mpc();
-            $lines = split("\n", $out);
+            $lines = $this->mpc();
+            $found = false;
             foreach ($lines as $l) {
-                $found = false;
                 if (strpos($l, 'Updating DB') === 0) {
                     $found = true;
                     break;
@@ -675,7 +683,7 @@ General:
             if ($isAssoc) {
                 echo "    $k. $v\n";
             } else {
-                echo sprintf('%5d. ', $k+1) . "$v\n";
+                echo sprintf('%4d. ', $k+1) . "$v\n";
             }
         }
         echo "\n";
@@ -749,7 +757,7 @@ General:
         foreach ($target as &$t) {
             $t['disp'] = str_replace($this->params['latestRoot'] . '/', '', $t['name']);
             if (!$this->params['simpleOut']) {
-                $t['disp'] .= ' [' . date('Y-m-d', $t['mtime']) . ']';
+                $t['disp'] = '[' . date('Y-m-d', $t['mtime']) . '] ' . $t['disp'];
             }
             $t['name'] = str_replace($this->params['mpdRoot'] . '/', '', $t['name']);
         }
