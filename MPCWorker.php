@@ -127,6 +127,8 @@ class MPCWorker
             }
         }
 
+        if (!$this->params['func']) $this->params['func'] = 'help';
+
         if ($this->params['debug']) {
             print_r($this->params);
         }
@@ -155,7 +157,6 @@ class MPCWorker
         // Parameters defined in the config file
         $p = isset($p) && is_array($p) ? $p : array();
 
-        $params['func']  = null;
         $params = array_merge(self::$paramDefaults, $p);
 
         array_shift($argv);  // take off the script name. useless.
@@ -287,8 +288,6 @@ class MPCWorker
                 die("what?: $arg");
             }
         }
-
-        if (!$params['func']) $params['func'] = 'help';
 
         $w = new self($params);
         $w->$params['func']();
