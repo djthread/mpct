@@ -20,6 +20,7 @@
  * @author thread <thethread@gmail.com>
  * @website http://www.threadbox.net/
  */
+
 MPCWorker::runFromCLIArguments($argv);
 
 class MPCWorker
@@ -140,10 +141,9 @@ class MPCWorker
      */
     public static function runFromCLIArguments($argv)
     {
-        foreach (array('mpct.conf.php', '~/.mpct.conf.php') as $f) {
-            if (file_exists($f)) {
-                include $f;
-            }
+        $cfile = $_SERVER['HOME'] . '/.mpct.conf.php';
+        if (file_exists($cfile)) {
+            include $cfile;
         }
 
         self::$toplevelMap  = isset($map) && is_array($map) ? $map : array();
@@ -158,11 +158,22 @@ class MPCWorker
         // I don't like this code much at all. It splits up a single arg into 
         // multiple ones so my alfred extension works. (Alfred sends all 
         // parameters, including spaces, as a single argument.)
+        $alfredMode = false;
         foreach ($argv as $av) {
-            foreach (split(' ', $av) as $c) {
-                $myargs[] = $c;
+            if ($av == '--alfred') {
+                $alfredMode = true;
+                break;
             }
         }
+        if ($alfredMode) {
+            foreach ($argv as $av) {
+                if ($av == '--alfred') continue;
+                foreach (split(' ', $av) as $c) {
+                    $myargs[] = $c;
+                }
+            }
+        } else $myargs = $argv;
+
 
         while ($myargs) {
             switch ($arg = array_shift($myargs)) {
@@ -197,20 +208,17 @@ class MPCWorker
             case '--search-artist': case '-sa':
                 $params['func']       = 'search';
                 $params['searchType'] = 'artist';
-                $params['search']     = implode(' ', $myargs);
-                $myargs = array();  // all done !
+                $params['search']     = array_shift($myargs);
                 break;
             case '--search-album': case '-sb':
                 $params['func']       = 'search';
                 $params['searchType'] = 'album';
-                $params['search']     = implode(' ', $myargs);
-                $myargs = array();  // all done !
+                $params['search']     = array_shift($myargs);
                 break;
             case '--search-title': case '-st':
                 $params['func']       = 'search';
                 $params['searchType'] = 'title';
-                $params['search']     = implode(' ', $myargs);
-                $myargs = array();  // all done !
+                $params['search']     = array_shift($myargs);
                 break;
             case '--random-tracks': case '-rt':
                 if (!isset($params['num'])) $params['num'] = 10;
@@ -230,8 +238,7 @@ class MPCWorker
                 $params['append'] = true;
                 break;
             case '--execute': case '-x':
-                $params['exe'] = implode(' ', $myargs);
-                $myargs = array();  // all done !
+                $params['exe'] = array_shift($myargs);
                 break;
             case '--num': case '-n':
                 if (!($arg = array_shift($myargs))
@@ -310,25 +317,26 @@ class MPCWorker
     protected function help()
     {
         $version = self::VERSION;
+        $self    = basename(__FILE__);
         echo "
 DJ Thread's MPC Tool, v$version
 
-The default action is to replace your MPD playlist and hit play.
-
-Action Overrides:
- -b,  --deadbeef       Add to deadbeef instead of MPD
- -l,  --list           List only mode
- -i,  --simple         Simple list only mode
-      --raw            The rest of the command line will go straight to mpc
-
-General:
- -la, --latest         Use latest albums
+Subjects (You need one of these):
  -rt, --random-tracks  Use random tracks 
  -ra, --random-albums  Use random albums
- -sa, --search-artist  The rest of the command line is an artist search term
- -sb, --search-album   The rest of the command line is an artist search term
- -st, --search-title   The rest of the command line is a track title search term
+ -sa, --search-artist  Use tracks with artist names containing the parameter
+ -sb, --search-album   Use tracks with album names containing the parameter
+ -st, --search-title   Use tracks with titles containing the parameter
  -ta, --this-album     Use the currently playing album
+ -la, --latest         Use latest albums
+
+Action Overrides (Default is to replace MPD playlist and hit play):
+ -l,  --list           List only mode
+ -i,  --simple         Simple list only mode
+ -b,  --deadbeef       Add to deadbeef
+      --raw            The rest of the command line will go straight to mpc
+
+Modifiers:
  -bt, --by-toplevel    Ask which toplevel dir to use (a short code CAN follow)
  -n,  --num            Number of tracks to add (default depends on action)
  -c,  --choose         Select one or more from the results
