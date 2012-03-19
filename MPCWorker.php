@@ -127,8 +127,6 @@ class MPCWorker
             }
         }
 
-        if (!$this->params['func']) $this->params['func'] = 'help';
-
         if ($this->params['debug']) {
             print_r($this->params);
         }
@@ -290,7 +288,7 @@ class MPCWorker
         }
 
         $w = new self($params);
-        $w->$params['func']();
+        $w->invoke();
     }
 
     /**
@@ -339,6 +337,17 @@ General:
 
 ";
         exit;
+    }
+
+    /**
+     * Invoke the func param and get on with it !
+     *
+     * @return null
+     */
+    public function invoke()
+    {
+        $func = $this->params['func'] ?: 'help';
+        $this->$func();
     }
 
     /**
