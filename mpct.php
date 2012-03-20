@@ -37,8 +37,8 @@ class MPCWorker
         'action'     => 'mpc',  // 'mpc' to add to mpd, 'deadbeef' to send it there,
                                 //   or 'list' to simply list the hits
 
-        'host'       => 'localhost',
-        'port'       => '6600',
+        'host'       => null,
+        'port'       => null,
         'mpc'        => '/usr/bin/mpc',
         'refresh'    => false,  // refresh MPD's latestRoot first
         'num'        => null,   // num of results. defaults depending on action.
@@ -107,7 +107,7 @@ class MPCWorker
      *
      * @var array
      */
-    protected $params = array();
+    protected static $params = array();
 
     /**
      * Protected contructor. Invoke this object with runFromCLIArguments()
@@ -116,18 +116,17 @@ class MPCWorker
      */
     protected function __construct(array $params)
     {
-        $this->params = $params;
+        self::$params = $params;
 
-        $this->params['mpcCmd'] = sprintf('%s -h %s -p %s',
-            $this->params['mpc'],
-            $this->params['host'],
-            $this->params['port']);
+        self::$params['mpcCmd'] = self::$params['mpc']
+            . (self::$params['host'] ? ' -h ' . self::$params['host'] : '')
+            . (self::$params['port'] ? ' -p ' . self::$params['port'] : '');
 
-        if ($this->params['debug']) {
-            print_r($this->params);
+        if (self::$params['debug']) {
+            print_r(self::$params);
         }
 
-        if ($this->params['refresh']) {
+        if (self::$params['refresh']) {
             $this->refreshMpd();
         }
     }
@@ -289,6 +288,13 @@ class MPCWorker
         }
 
         $configFileParams = isset($p) && is_array($p) ? $p : array();
+        // $defaultParams    = array_merge(self::$paramDefaults, array(
+        //     // override defaults from environment
+        //     'host' => isset($_SERVER['MPD_HOST'])
+        //             ? $_SERVER['MPD_HOST'] : self::$paramDefaults['host'],
+        //     'port' => isset($_SERVER['MPD_PORT'])
+        //             ? $_SERVER['MPD_PORT'] : self::$paramDefaults['port'],
+        // ));
 
         $final = array_merge(self::$paramDefaults, $configFileParams);
 
@@ -365,7 +371,7 @@ Modifiers:
      */
     public function invoke()
     {
-        $func = $this->params['func'] ?: 'help';
+        $func = self::$params['func'] ?: 'help';
         $this->$func();
     }
 
@@ -378,7 +384,7 @@ Modifiers:
     public function randomTracks()
     {
         $tracks = array();
-        for ($i=0; $i<$this->params['num']; $i++) {
+        for ($i=0; $i<self::$params['num']; $i++) {
             $tracks[] = $this->getRandomTrack();
         }
 
@@ -392,10 +398,10 @@ Modifiers:
     {
         $albums = array();
 
-        for ($i=0; $i<$this->params['num']; $i++) {
+        for ($i=0; $i<self::$params['num']; $i++) {
             $track = $this->getRandomTrack();
             if (!preg_match('/^(.+)\//', $track, $matches)) {
-                $this->out("Couldn't strip dir off of file: $track\n");
+                self::out("Couldn't strip dir off of file: $track\n");
                 $i--; continue;
             }
 
@@ -417,7 +423,7 @@ Modifiers:
         if (!$file || !isset($file[0])
           || !preg_match('/^(.+)\//', $file[0], $matches)
         ) {
-            $this->out("The current track doesn't belong to an album!",
+            self::out("The current track doesn't belong to an album!",
                 array('fatal' => true));
         }
 
@@ -431,7 +437,7 @@ Modifiers:
      */
     public function raw()
     {
-        $this->mpc($this->params['rawCmd'], false, true);
+        $this->mpc(self::$params['rawCmd'], false, true);
     }
 
     /**
@@ -446,7 +452,7 @@ Modifiers:
 
         while (!preg_match('/(\.flac|\.mp3|\.ogg)$/i', $cur)) {
             if (!$dirs) {
-                $this->out("Hit a dead end: $cur", array('debug' => true));
+                self::out("Hit a dead end: $cur", array('debug' => true));
                 $dirs = $this->lsStartDir();
                 $cur  = $dirs[rand(0, count($dirs) - 1)];
                 continue;
@@ -469,14 +475,14 @@ Modifiers:
 
         if (self::$btRandom) {
 
-            $tl = $this->params['bt']
-                ? self::getToplevel($this->params['bt'])
+            $tl = self::$params['bt']
+                ? self::getToplevel(self::$params['bt'])
                 : self::$toplevelDirs[rand(0, count(self::$toplevelDirs) - 1)];
 
             if (!$dirs = $this->lsDir($tl)) {
                 // ok, some toplevel is empty or something.
                 // no more by-toplevel randomness anymore.
-                $this->out("Toplevel '$tl' is empty or missing. Toplevel dirs "
+                self::out("Toplevel '$tl' is empty or missing. Toplevel dirs "
                     . 'are disabled.', array('debug' => true));
                 self::$btRandom = false;
             }
@@ -527,9 +533,9 @@ Modifiers:
     {
         $mpc = $this->mpc();
         if (isset($mpc[0]) && isset($mpc[1])) {
-            $this->out("{$mpc[0]}\n{$mpc[1]}");
+            self::out("{$mpc[0]}\n{$mpc[1]}");
         } else {
-            $this->out(implode("\n", $mpc));
+            self::out(implode("\n", $mpc));
         }
     }
 
@@ -541,9 +547,9 @@ Modifiers:
      */
     protected function act($items)
     {
-        if ($this->params['debug']) echo "\n";
+        if (self::$params['debug']) echo "\n";
 
-        if ($this->params['choose']) {
+        if (self::$params['choose']) {
             $items = $this->getSelectionFrom($items, true);
         }
 
@@ -551,30 +557,30 @@ Modifiers:
         for ($i=0; $i<$c; $i++) {
             $x = is_string($items[$i]) ? array('name' => $items[$i]) : $items[$i];
 
-            if ($this->params['action'] == 'mpc') {
-                if ($i == 0 && !$this->params['append']) $this->mpc('clear');
+            if (self::$params['action'] == 'mpc') {
+                if ($i == 0 && !self::$params['append']) $this->mpc('clear');
                 $this->mpc('add "' . self::quotefix($x['name']) . '"',
-                    !$this->params['quiet']);
-                if ($i == 0 && !$this->params['append']) $this->mpc('play');
-            } else if ($this->params['action'] == 'deadbeef') {
+                    !self::$params['quiet']);
+                if ($i == 0 && !self::$params['append']) $this->mpc('play');
+            } else if (self::$params['action'] == 'deadbeef') {
                 $this->cmd('deadbeef "' . self::quotefix($x['name']) . '"',
-                    !$this->params['quiet']);
-            } else if ($this->params['action'] == 'list') {
+                    !self::$params['quiet']);
+            } else if (self::$params['action'] == 'list') {
                 $disp = isset($x['disp']) ? $x['disp'] : $x['name'];
                 echo "$disp\n";
             } else {
-                $this->out("Action is what ({$this->action}) ?", array('fatal' => true));
+                self::out("Action is what ({$this->action}) ?", array('fatal' => true));
             }
 
-            if ($this->params['exe']) {
+            if (self::$params['exe']) {
                 $cmd = str_replace('X',
-                    '"' . self::quotefix($this->params['mpdRoot'] . '/' . $x['name']) . '"',
-                    $this->params['exe']);
+                    '"' . self::quotefix(self::$params['mpdRoot'] . '/' . $x['name']) . '"',
+                    self::$params['exe']);
                 $this->cmd($cmd, true, true);
             }
         }
 
-        // if ($this->params['action'] == 'mpc') {
+        // if (self::$params['action'] == 'mpc') {
         //     $this->echoStatus();
         // }
     }
@@ -586,8 +592,8 @@ Modifiers:
      */
     protected function refreshMpd()
     {
-        $it = str_replace($this->params['mpdRoot'] . '/', '',
-            $this->params['latestRoot']);
+        $it = str_replace(self::$params['mpdRoot'] . '/', '',
+            self::$params['latestRoot']);
         $g = $this->mpc('update "' . self::quotefix($it) . '"', true);
         echo "Waiting for DB to refresh..";
         do {
@@ -613,28 +619,33 @@ Modifiers:
      */
     public function mpc($cmd = null, $echoCmd = false, $echoResult = false)
     {
-        $cmd = $this->params['mpcCmd'] .  ' ' . $cmd;
-        return $this->cmd($cmd, $echoCmd, $echoResult);
+        $retval = null;
+        $cmd    = self::$params['mpcCmd'] .  ' ' . $cmd;
+        $out    = $this->cmd($cmd, $echoCmd, $echoResult, $retval);
+
+        if ($retval != 0) self::out('mpc fail.', array('fatal' => true));
     }
 
     /**
      * Run a command. Return the lines of returned output in an array.
      *
      * @param string $cmd
+     * @param boolean $echoCmd
+     * @param boolean $echoResult
      * @return array
      */
-    protected function cmd($cmd, $echoCmd, $echoResult)
+    protected function cmd($cmd, $echoCmd, $echoResult, &$retval = null)
     {
         $list = array();
 
-        if ($echoCmd || $this->params['debug']) {
-            $this->out(' -> ' . $cmd);
+        if ($echoCmd || self::$params['debug']) {
+            self::out(' -> ' . $cmd);
         }
 
-        exec($cmd, $list);
+        exec($cmd, $list, $retval);
 
-        if ($list && ($echoResult || $this->params['debug'])) {
-            $this->out(implode("\n", $list));
+        if ($list && ($echoResult || self::$params['debug'])) {
+            self::out(implode("\n", $list));
         }
 
         return $list;
@@ -649,16 +660,52 @@ Modifiers:
      */
     protected function out($msg, $o = array())
     {
-        $o = array(
+        $o = array_merge(array(
             'debug' => false,
             'fatal' => false,
-        ) + $o;
+            'warn'  => false,
+            'color' => null,
+        ), $o);
 
-        if ($o['debug'] && !$this->params['debug']) return;
+        if ($o['fatal'] || $o['warn']) $o['color'] = 'red';
 
-        echo "$msg\n";
+        if ($o['debug'] && !self::$params['debug']) return;
+
+        echo $o['color'] ? self::col($msg, $o['color']) : $msg;
+        echo "\n";
 
         if ($o['fatal']) die();
+    }
+
+    /**
+     * Add some color to some output
+     *
+     * @param string $txt
+     * @param string $color
+     */
+    protected static function col($txt, $color)
+    {
+        $_colors = array(
+            'light red'   => "[1;31m",
+            'light green' => "[1;32m",
+            'yellow'      => "[1;33m",
+            'light blue'  => "[1;34m",
+            'magenta'     => "[1;35m",
+            'light cyan'  => "[1;36m",
+            'white'       => "[1;37m",
+            'normal'      => "[0m",
+            'black'       => "[0;30m",
+            'red'         => "[0;31m",
+            'green'       => "[0;32m",
+            'brown'       => "[0;33m",
+            'blue'        => "[0;34m",
+            'cyan'        => "[0;36m",
+            'bold'        => "[1m",
+            'underscore'  => "[4m",
+            'reverse'     => "[7m",
+        );
+
+        return chr(27) . $_colors[$color] . $txt . chr(27) . '[0m';
     }
 
     /**
@@ -696,7 +743,7 @@ Modifiers:
             if ($isAssoc) {
                 echo "    $k. $v\n";
             } else {
-                echo sprintf('%4d. ', $k+1) . "$v\n";
+                echo self::col(sprintf('%4d. ', $k+1), 'green') . "$v\n";
             }
         }
         echo "\n";
@@ -712,14 +759,14 @@ Modifiers:
                 foreach (preg_split('/[, ]+/', $choice) as $bit) {
                     if ($isAssoc) {                  // associative arrays
                         if (!array_key_exists($bit, $options)) {
-                            $this->out("Invalid input: $bit");
+                            self::out("Invalid input: $bit", array('warn' => true));
                             $fail = true;
                         }
                         $ret[] = $options[$bit];
                     } else if (ctype_digit($bit)) {  // numeric-indexed array
                         $b = $bit - 1;
                         if (!array_key_exists($b, $options)) {
-                            $this->out("Invalid input: $bit");
+                            self::out("Invalid input: $bit", array('warn' => true));
                             $fail = true;
                         }
                         $ret[] = $options[$b];
@@ -732,14 +779,14 @@ Modifiers:
                             $ret[] = $options[$i-1];
                         }
                     } else {
-                        $this->out("Invalid input: $bit");
+                        self::out("Invalid input: $bit", array('warn' => true));
                         $fail = true;
                     }
                 }
             } else {
                 $c = $isAssoc ? $choice : $choice-1;
                 if (!array_key_exists($c, $options)) {
-                    $this->out("Invalid input: $choice");
+                    self::out("Invalid input: $choice", array('warn' => true));
                     $fail = true;
                 }
                 $ret = $options[$c];
@@ -757,22 +804,33 @@ Modifiers:
      */
     public function latest()
     {
-        $dirs = $this->recurse($this->params['latestRoot']);
+        $dirs = $this->recurse(self::$params['latestRoot']);
 
         // Sort them by mod time
         usort($dirs, function($a, $b) {
             return $a['mtime'] < $b['mtime'];
         });
 
-        $n = $this->params['num'] < count($dirs) ? $this->params['num'] : count($dirs);
+        $n = self::$params['num'] < count($dirs) ? self::$params['num'] : count($dirs);
         $target = array_slice($dirs, 0, $n);
 
         foreach ($target as &$t) {
-            $t['disp'] = str_replace($this->params['latestRoot'] . '/', '', $t['name']);
-            if (!$this->params['simpleOut']) {
-                $t['disp'] = '[' . date('Y-m-d', $t['mtime']) . '] ' . $t['disp'];
+            $disp = str_replace(self::$params['latestRoot'] . '/', '', $t['name']);
+            if (!self::$params['simpleOut']) {
+                $p1 = ''; $p2 = $disp;
+                if (preg_match('/^(.+\/)(.+)$/', $disp, $matches)) {
+                    $p1 = self::col($matches[1], 'cyan');
+                    $p2 = $matches[2];
+                }
+                $regex = '/^(.+?)(-?(?:[\(\[].+|FLAC|MP3|V0|\d+CD).*)/';
+                if (preg_match($regex, $p2, $matches)) {
+                    $p2 = $matches[1] . self::col($matches[2], 'brown');
+                }
+                // $disp = str_replace(array('EP'), array(self::col('EP', 'red')), $p1 . $p2);
+                $disp = self::col(date('m-d', $t['mtime']) . '. ', 'cyan') . $p1 . $p2;
             }
-            $t['name'] = str_replace($this->params['mpdRoot'] . '/', '', $t['name']);
+            $t['disp'] = $disp;
+            $t['name'] = str_replace(self::$params['mpdRoot'] . '/', '', $t['name']);
         }
 
         $this->act($target);
@@ -785,13 +843,13 @@ Modifiers:
      */
     public function search()
     {
-        if ($this->params['searchType'] == 'title') {
+        if (self::$params['searchType'] == 'title') {
             $list = $this->mpc('search title "'
-                  . self::quotefix($this->params['search']) . '"');
+                  . self::quotefix(self::$params['search']) . '"');
         } else {
             $list = array();
-            $all = $this->mpc('search ' . $this->params['searchType']
-                  . ' "' . self::quotefix($this->params['search']) . '"');
+            $all = $this->mpc('search ' . self::$params['searchType']
+                  . ' "' . self::quotefix(self::$params['search']) . '"');
             foreach ($all as $i) {
                 if (preg_match('/^(.+)\//', $i, $matches)
                   && !in_array($matches[1], $list)
@@ -813,7 +871,7 @@ Modifiers:
      */
     protected function recurse($dir, $d = null)
     {
-        if (is_null($d)) $d = $this->params['deep'];
+        if (is_null($d)) $d = self::$params['deep'];
 
         $dirs = array();  // each is: array('name' => name, 'mtime' => mtime);
         $glob = glob("$dir/*", GLOB_ONLYDIR);
@@ -822,9 +880,9 @@ Modifiers:
 
             // if it's the top level of the search, make sure we skip any dirs in 
             // the exclude array.
-            if ($d == $this->params['deep']) {
+            if ($d == self::$params['deep']) {
                 preg_match('/([^\/]+)$/', $t, $matches);
-                if (in_array($matches[1], $this->params['exclude'])) {
+                if (in_array($matches[1], self::$params['exclude'])) {
                     continue;
                 }
             }
