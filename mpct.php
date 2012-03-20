@@ -246,7 +246,8 @@ class MPCWorker
                 if (!($arg = array_shift($myargs))
                   || !ctype_digit($arg)
                 ) {
-                    die("--num must be followed by a number\n");
+                    self::out('--num must be followed by a number',
+                        array('fatal' => true));
                 }
                 $params['num'] = $arg;
                 break;
@@ -454,6 +455,7 @@ Modifiers:
                 self::out("Hit a dead end: $cur", array('debug' => true));
                 $dirs = $this->lsStartDir();
                 $cur  = $dirs[rand(0, count($dirs) - 1)];
+                echo "[$cur]\n";
                 continue;
             }
             $dirs = $this->lsDir($cur);
@@ -478,7 +480,7 @@ Modifiers:
                 ? self::getToplevel(self::$params['bt'])
                 : self::$toplevelDirs[rand(0, count(self::$toplevelDirs) - 1)];
 
-            if (!$dirs = $this->lsDir($tl)) {
+            if (!$dirs = $this->lsDir($tl, true)) {
                 // ok, some toplevel is empty or something.
                 // no more by-toplevel randomness anymore.
                 self::out("Toplevel '$tl' is empty or missing. Toplevel dirs "
@@ -497,12 +499,11 @@ Modifiers:
      * switch by-toplevel off.
      *
      * @param string $dir
+     * @param boolean $failok
      * @return array
      */
-    protected function lsDir($dir)
+    protected function lsDir($dir, $failok = false)
     {
-        $fok = array('failok' => true);
-
         if ($dir == '/') {
             if (!self::$rootCache) {
                 self::$rootCache = $this->mpc('ls /');
@@ -511,7 +512,7 @@ Modifiers:
         }
 
         return $this->mpc('ls "' . self::quotefix($dir) . '"',
-            false, false, $fok);
+            false, false, array('failok' => $failok));
     }
 
     /**
@@ -634,6 +635,8 @@ Modifiers:
         if ($retval != 0 && !$o['failok']) {
             self::out('mpc fail.', array('fatal' => true));
         }
+
+        return $out;
     }
 
     /**
