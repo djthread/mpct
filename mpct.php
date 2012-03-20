@@ -826,7 +826,7 @@ Modifiers:
                     $p1 = self::col($matches[1], 'cyan');
                     $p2 = $matches[2];
                 }
-                $regex = '/^(.+?)(-?(?:[\(\[].+|FLAC|MP3|V0|\d+CD).*)/';
+                $regex = '/^(.+?)((?:-| - )?(?:[\(\[].+|FLAC|MP3|V0|\d+CD|WEB|20\d\d+19\d\d).*)/i';
                 if (preg_match($regex, $p2, $matches)) {
                     $p2 = $matches[1] . self::col($matches[2], 'brown');
                 }
