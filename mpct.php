@@ -388,7 +388,7 @@ Modifiers:
             $tracks[] = $this->getRandomTrack();
         }
 
-        $this->act($tracks);
+        $this->act(self::colorify($tracks));
     }
 
     /**
@@ -408,7 +408,7 @@ Modifiers:
             $albums[] = $matches[1];
         }
 
-        $this->act($albums);
+        $this->act(self::colorify($albums));
     }
 
     /**
@@ -722,6 +722,46 @@ Modifiers:
     }
 
     /**
+     * "Standard" method to colorify a single result or array of them
+     *
+     * @param string|array $str
+     * @param array $o
+     * @return string|array
+     */
+    protected static function colorify($in, array $o = array())
+    {
+        $arr   = $in;
+        $isArr = is_array($in);
+
+        if (!$isArr) {
+            $arr = array($in);
+            
+        }
+
+        foreach ($arr as &$e) {
+            $p1 = ''; $p2 = $e;
+            if (preg_match('/^(.+\/)(.+)$/', $e, $matches)) {
+                $p1 = self::col($matches[1], 'cyan');
+                $p2 = $matches[2];
+            }
+            $regex = '/^(.+?)((?:-| - )?(?:[\(\[].+|FLAC|MP3|V0|\d+CD|WEB|20\d\d+19\d\d).*)/i';
+            if (preg_match($regex, $p2, $matches)) {
+                $p2 = $matches[1] . self::col($matches[2], 'brown');
+            }
+            // $disp = str_replace(array('EP'), array(self::col('EP', 'red')), $p1 . $p2);
+            $e = '';
+
+            if (isset($o['mtime'])) {
+                $e .= self::col(date('m-d', $o['mtime']) . '. ', 'cyan');
+            }
+
+            $e .= $p1 . $p2;
+        }
+
+        return $isArr ? $arr : $arr[0];
+    }
+
+    /**
      * @param string $short
      * @return string (the full toplevel dir name)
      */
@@ -828,21 +868,10 @@ Modifiers:
         $target = array_slice($dirs, 0, $n);
 
         foreach ($target as &$t) {
-            $disp = str_replace(self::$params['latestRoot'] . '/', '', $t['name']);
+            $t['disp'] = str_replace(self::$params['latestRoot'] . '/', '', $t['name']);
             if (!self::$params['simpleOut']) {
-                $p1 = ''; $p2 = $disp;
-                if (preg_match('/^(.+\/)(.+)$/', $disp, $matches)) {
-                    $p1 = self::col($matches[1], 'cyan');
-                    $p2 = $matches[2];
-                }
-                $regex = '/^(.+?)((?:-| - )?(?:[\(\[].+|FLAC|MP3|V0|\d+CD|WEB|20\d\d+19\d\d).*)/i';
-                if (preg_match($regex, $p2, $matches)) {
-                    $p2 = $matches[1] . self::col($matches[2], 'brown');
-                }
-                // $disp = str_replace(array('EP'), array(self::col('EP', 'red')), $p1 . $p2);
-                $disp = self::col(date('m-d', $t['mtime']) . '. ', 'cyan') . $p1 . $p2;
+                $t['disp'] = self::colorify($t['disp'], array('mtime', $t['mtime']));
             }
-            $t['disp'] = $disp;
             $t['name'] = str_replace(self::$params['mpdRoot'] . '/', '', $t['name']);
         }
 
@@ -872,7 +901,7 @@ Modifiers:
             }
         }
 
-        $this->act($list);
+        $this->act(self::colorify($list));
     }
 
     /**
