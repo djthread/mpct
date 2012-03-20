@@ -267,7 +267,7 @@ class MPCWorker
             case '--full-paths': case '-f':
                 $params['fullPaths'] = true;
                 break;
-            case '--debug': case '-d':
+            case '--debug': case '-d':  // undocumented
                 $params['debug'] = true;
                 break;
             case '--quiet': case '-q':
@@ -287,24 +287,20 @@ class MPCWorker
             }
         }
 
-        $configFileParams = isset($p) && is_array($p) ? $p : array();
-        // $defaultParams    = array_merge(self::$paramDefaults, array(
-        //     // override defaults from environment
-        //     'host' => isset($_SERVER['MPD_HOST'])
-        //             ? $_SERVER['MPD_HOST'] : self::$paramDefaults['host'],
-        //     'port' => isset($_SERVER['MPD_PORT'])
-        //             ? $_SERVER['MPD_PORT'] : self::$paramDefaults['port'],
-        // ));
+        // building the final parameter array ...
+        $final = array_merge(self::$paramDefaults,
+            isset($p) && is_array($p) ? $p : array());
 
-        $final = array_merge(self::$paramDefaults, $configFileParams);
-
+        // split the mode parmeter by the , and apply each.
         if (array_key_exists('mode', $params)) {
-            if (array_key_exists('modes', $final)
-              && array_key_exists($params['mode'], $final['modes'])
-            ) {
-                $final = array_merge($final, $final['modes'][$params['mode']]);
-            } else {
-                die("Couldn't find mode: {$params['mode']}\n");
+            foreach (split(',', $params['mode']) as $mode) {
+                if (array_key_exists('modes', $final)
+                  && array_key_exists($mode, $final['modes'])
+                ) {
+                    $final = array_merge($final, $final['modes'][$mode]);
+                } else {
+                    die("Couldn't find mode: $mode\n");
+                }
             }
         }
 
@@ -354,10 +350,9 @@ Modifiers:
  -p,  --port           set the target port (default: 6600)
  -r,  --refresh        Refresh MPD's latestRoot first
  -f,  --full-paths     Show system-absolute pathnames in output
- -d,  --debug          echo debugging information
  -q,  --quiet          Sssshhh
- -o,  --mode           Specify the key of the \$p['modes'] array in the config
-                       file to overwrite default params with.
+ -o,  --mode           Specify the key(s) of the 'modes' array in the config
+                       file to overwrite default params with. eg. -o mode1,mode2
  -?,  --help           this.
 
 ";
@@ -502,6 +497,8 @@ Modifiers:
      */
     protected function lsDir($dir)
     {
+        $fok = array('failok' => true);
+
         if ($dir == '/') {
             if (!self::$rootCache) {
                 self::$rootCache = $this->mpc('ls /');
@@ -509,7 +506,8 @@ Modifiers:
             return self::$rootCache;
         }
 
-        return $this->mpc('ls "' . self::quotefix($dir) . '"');
+        return $this->mpc('ls "' . self::quotefix($dir) . '"',
+            false, false, $fok);
     }
 
     /**
@@ -580,9 +578,9 @@ Modifiers:
             }
         }
 
-        // if (self::$params['action'] == 'mpc') {
-        //     $this->echoStatus();
-        // }
+        if (self::$params['action'] == 'mpc' && self::$params['quiet']) {
+            $this->echoStatus();
+        }
     }
 
     /**
@@ -615,15 +613,23 @@ Modifiers:
      * @param string $cmd
      * @param boolean $echoCmd
      * @param boolean $echoResult
+     * @param array $o
      * @return array
      */
-    public function mpc($cmd = null, $echoCmd = false, $echoResult = false)
+    public function mpc($cmd = null, $echoCmd = false, $echoResult = false,
+        array $o = array())
     {
+        $o = array_merge(array(
+            'failok' => false,
+        ), $o);
+
         $retval = null;
         $cmd    = self::$params['mpcCmd'] .  ' ' . $cmd;
         $out    = $this->cmd($cmd, $echoCmd, $echoResult, $retval);
 
-        if ($retval != 0) self::out('mpc fail.', array('fatal' => true));
+        if ($retval != 0 && !$o['failok']) {
+            self::out('mpc fail.', array('fatal' => true));
+        }
     }
 
     /**
