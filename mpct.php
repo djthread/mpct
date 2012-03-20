@@ -233,7 +233,7 @@ class MPCWorker
             case '--choose': case '-c':
                 $params['choose'] = true;
                 break;
-            case '--no-choose': case '-nc':
+            case '--go': case '-g':
                 $params['choose'] = false;
                 break;
             case '--append': case '-a':
@@ -349,7 +349,7 @@ Modifiers:
  -bt, --by-toplevel    Ask which toplevel dir to use (a short code CAN follow)
  -n,  --num            Number of tracks to add (default depends on action)
  -c,  --choose         Select one or more from the results
- -nc, --no-choose      Disable choose mode
+ -g,  --go             GO, use all results! (Disable choose mode)
  -a,  --append         Add tunage, preserving the current playlist
  -x,  --execute        The rest of the command line is a command to execute on each
                        result. X is replaced with the absolute location for each.
