@@ -43,7 +43,7 @@ class MPCWorker
         'refresh'    => false,  // refresh MPD's latestRoot first
         'num'        => null,   // num of results. defaults depending on action.
         'append'     => false,  // just add to the end of the playlist
-        'choose'     => false,  // choose from the results !
+        'choose'     => true,   // choose from the results !
         'bt'         => null,   // short code for "by toplevel"
         'simpleOut'  => false,  // Simple listing, used if action is list
         'exe'        => null,   // execute cmd for each hit. X is replaced with result.
@@ -233,6 +233,9 @@ class MPCWorker
             case '--choose': case '-c':
                 $params['choose'] = true;
                 break;
+            case '--go': case '-g':
+                $params['choose'] = false;
+                break;
             case '--append': case '-a':
                 $params['append'] = true;
                 break;
@@ -342,6 +345,7 @@ Modifiers:
  -bt, --by-toplevel    Ask which toplevel dir to use (a short code CAN follow)
  -n,  --num            Number of tracks to add (default depends on action)
  -c,  --choose         Select one or more from the results
+ -g,  --go             GO, use all results! (Disable choose mode)
  -a,  --append         Add tunage, preserving the current playlist
  -x,  --execute        The rest of the command line is a command to execute on each
                        result. X is replaced with the absolute location for each.
@@ -828,7 +832,7 @@ Modifiers:
                     $p1 = self::col($matches[1], 'cyan');
                     $p2 = $matches[2];
                 }
-                $regex = '/^(.+?)(-?(?:[\(\[].+|FLAC|MP3|V0|\d+CD).*)/';
+                $regex = '/^(.+?)((?:-| - )?(?:[\(\[].+|FLAC|MP3|V0|\d+CD|WEB|20\d\d+19\d\d).*)/i';
                 if (preg_match($regex, $p2, $matches)) {
                     $p2 = $matches[1] . self::col($matches[2], 'brown');
                 }
