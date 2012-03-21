@@ -785,7 +785,7 @@ alias mla='$self --latest'
             $p1 = ''; $p2 = $e;
             if (preg_match('/^(.+\/)(.+)$/', $e, $matches)) {
                 $path = $matches[1];
-                $c    = $matches % 2 ? 'cyan' : 'normal';
+                $c    = substr_count($path, '/') % 2 ? 'cyan' : 'normal';
                 while (($pos = strpos($path, '/')) !== false && $p = substr($path, 0, $pos + 1)) {
                     $p1   .= self::col($p, $c);
                     $c     = $c == 'cyan' ? 'normal' : 'cyan';
