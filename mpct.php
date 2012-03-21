@@ -784,10 +784,16 @@ alias mla='$self --latest'
         foreach ($arr as &$e) {
             $p1 = ''; $p2 = $e;
             if (preg_match('/^(.+\/)(.+)$/', $e, $matches)) {
-                $p1 = self::col($matches[1], 'cyan');
+                $path = $matches[1];
+                $c    = $matches % 2 ? 'cyan' : 'normal';
+                while (($pos = strpos($path, '/')) !== false && $p = substr($path, 0, $pos + 1)) {
+                    $p1   .= self::col($p, $c);
+                    $c     = $c == 'cyan' ? 'normal' : 'cyan';
+                    $path  = substr($path, strlen($p));
+                }
                 $p2 = $matches[2];
             }
-            $regex = '/^(.+?)((?:-| - )?(?:[\(\[].+|FLAC|MP3|V0|\d+CD|WEB|20\d\d+19\d\d).*)/i';
+            $regex = '/^(.+?)((?:-| - |\.)?(?:[\(\[].+|flac|ogg|mp3|v0|\d+cd|web|20\d\d+|19\d\d).*)/i';
             if (preg_match($regex, $p2, $matches)) {
                 $p2 = $matches[1] . self::col($matches[2], 'brown');
             }
