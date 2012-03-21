@@ -37,9 +37,9 @@ class MPCWorker
         'action'     => 'mpc',  // 'mpc' to add to mpd, 'deadbeef' to send it there,
                                 //   or 'list' to simply list the hits
 
-        'host'       => null,
-        'port'       => null,
-        'mpc'        => '/usr/bin/mpc',
+        'host'       => null,   // override the host default/environment
+        'port'       => null,   // override the host default/environment
+        'mpc'        => null,   // full path/file to the mpc binary
         'refresh'    => false,  // refresh MPD's latestRoot first
         'num'        => null,   // num of results. defaults depending on action.
         'append'     => false,  // just add to the end of the playlist
@@ -51,8 +51,8 @@ class MPCWorker
         'modes'      => array(),  // label => array of key/vals to override parameters
         'mode'       => null,   // selected label of modes array, if any
         'fullPaths'  => false,  // show system-absolute pathnames in output
-        'debug'      => false,
-        'quiet'      => false,
+        'debug'      => false,  // show tons of unorganized output
+        'quiet'      => false,  // show less output... different output
 
         'rawCmd'     => null,   // overrides everything, execute args for mpc
 
@@ -118,7 +118,8 @@ class MPCWorker
     {
         self::$params = $params;
 
-        self::$params['mpcCmd'] = self::$params['mpc']
+        self::$params['mpcCmd'] =
+              (self::$params['mpc']  ? self::$params['mpc'] : 'mpc')
             . (self::$params['host'] ? ' -h ' . self::$params['host'] : '')
             . (self::$params['port'] ? ' -p ' . self::$params['port'] : '');
 
@@ -224,7 +225,7 @@ class MPCWorker
                 $params['func'] = 'randomTracks';
                 break;
             case '--random-albums': case '-ra':
-                if (!isset($params['num'])) $params['num'] = 1;
+                if (!isset($params['num'])) $params['num'] = 5;
                 $params['func'] = 'randomAlbums';
                 break;
             case '--this-album': case '-ta':
@@ -282,6 +283,9 @@ class MPCWorker
                     die("Mode parameter was missing.\n");
                 }
                 $params['mode'] = $arg;
+                break;
+            case '--aliases': case '-al':
+                $params['func'] = 'aliases';
                 break;
             case '--help': case '-?':
                 $params['func'] = 'help';
@@ -345,7 +349,7 @@ Action Overrides (Default is to replace MPD playlist and hit play):
 Modifiers:
  -bt, --by-toplevel    Ask which toplevel dir to use (a short code CAN follow)
  -n,  --num            Number of tracks to add (default depends on action)
- -c,  --choose         Select one or more from the results
+ -c,  --choose         Select one or more from the results (default: on)
  -g,  --go             GO, use all results! (Disable choose mode)
  -a,  --append         Add tunage, preserving the current playlist
  -x,  --execute        The rest of the command line is a command to execute on each
@@ -355,11 +359,32 @@ Modifiers:
  -p,  --port           set the target port (default: 6600)
  -r,  --refresh        Refresh MPD's latestRoot first
  -f,  --full-paths     Show system-absolute pathnames in output
- -q,  --quiet          Sssshhh
+ -q,  --quiet          Less output
  -o,  --mode           Specify the key(s) of the 'modes' array in the config
                        file to overwrite default params with. eg. -o mode1,mode2
+ -al, --aliases        Nifty aliases. Recommended: $self -al >> ~/.bashrc
  -?,  --help           this.
 
+";
+        exit;
+    }
+
+    /**
+     * Display recommended aliases
+     *
+     * @return null
+     */
+    protected function aliases()
+    {
+        $self = __FILE__;
+        echo "
+alias m='$self'
+alias mrt='$self --random-tracks'
+alias mra='$self --random-albums'
+alias msa='$self --search-artist'
+alias msb='$self --search-album'
+alias mta='$self --this-album'
+alias mla='$self --latest'
 ";
         exit;
     }
@@ -388,7 +413,7 @@ Modifiers:
             $tracks[] = $this->getRandomTrack();
         }
 
-        $this->act(self::colorify($tracks));
+        $this->act($tracks, array('colorify' => true));
     }
 
     /**
@@ -408,7 +433,7 @@ Modifiers:
             $albums[] = $matches[1];
         }
 
-        $this->act(self::colorify($albums));
+        $this->act($albums, array('colorify' => true));
     }
 
     /**
@@ -545,20 +570,39 @@ Modifiers:
     /**
      * Take the chosen action on a given item with an mpd-relative path !
      *
+     * If an array is passed in, I'll assume each element has a 'name' element
+     *
      * @param string|array $items
+     * @param array $o
      * @return null
      */
-    protected function act($items)
+    protected function act($items, array $o = array())
     {
+        $o = array_merge(array(
+            'colorify' => false,
+        ), $o);
+
         if (self::$params['debug']) echo "\n";
 
         if (self::$params['choose']) {
+            if ($o['colorify']) {
+                foreach ($items as &$i) {
+                    if (is_array($i)) {
+                        $i['disp'] = self::colorify($i['name']);
+                    } else {
+                        $i = array('name' => $i, 'disp' => self::colorify($i));
+                    }
+                }
+            }
             $items = $this->getSelectionFrom($items, true);
         }
 
         $c = count($items);
         for ($i=0; $i<$c; $i++) {
             $x = is_string($items[$i]) ? array('name' => $items[$i]) : $items[$i];
+
+            // make a colorized display version if option is enabled
+            if ($o['colorify']) $o['disp'] = self::colorify($x['name']);
 
             if (self::$params['action'] == 'mpc') {
                 if ($i == 0 && !self::$params['append']) $this->mpc('clear');
@@ -631,6 +675,8 @@ Modifiers:
         $retval = null;
         $cmd    = self::$params['mpcCmd'] .  ' ' . $cmd;
         $out    = $this->cmd($cmd, $echoCmd, $echoResult, $retval);
+        $out    = array_filter($out,
+            function ($i) { return substr($i, 0, 7) != 'error: '; });
 
         if ($retval != 0 && !$o['failok']) {
             self::out('mpc fail.', array('fatal' => true));
@@ -655,7 +701,7 @@ Modifiers:
             self::out(' -> ' . $cmd);
         }
 
-        exec($cmd, $list, $retval);
+        exec($cmd . ' 2>&1', $list, $retval);
 
         if ($list && ($echoResult || self::$params['debug'])) {
             self::out(implode("\n", $list));
@@ -733,10 +779,7 @@ Modifiers:
         $arr   = $in;
         $isArr = is_array($in);
 
-        if (!$isArr) {
-            $arr = array($in);
-            
-        }
+        if (!$isArr) $arr = array($in);
 
         foreach ($arr as &$e) {
             $p1 = ''; $p2 = $e;
@@ -831,6 +874,8 @@ Modifiers:
                         for ($i=$m[1]; $i<=$m[2]; $i++) {
                             $ret[] = $options[$i-1];
                         }
+                    } else if ($bit == 'a') {
+                        self::$params['append'] = true;
                     } else {
                         self::out("Invalid input: $bit", array('warn' => true));
                         $fail = true;
@@ -901,7 +946,7 @@ Modifiers:
             }
         }
 
-        $this->act(self::colorify($list));
+        $this->act($list, array('colorify' => true));
     }
 
     /**

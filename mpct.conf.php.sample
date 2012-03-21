@@ -1,4 +1,21 @@
 <?php
+/**
+ * Copy this file to ~/.mpct.conf.php to override default behavior.
+ *
+ * The internal parameters that may be overridden are listed near the top of
+ * the main script.
+ *
+ * The modes feature allows you to set up an entire set of flags to be
+ * referred to easily with the -o flag.
+ *
+ * The order of parameter precedence goes:
+ *   - $paramDefaults static array at the top of the script
+ *   - $p settings in this file
+ *   - the mode arrays, added in order
+ *   - command-line flags
+ *
+ */
+
 $p = array(
 	'mpc'        => '/usr/local/bin/mpc',
 	'latestRoot' => '/Volumes/storage/music/tmp/stage2',
