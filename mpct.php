@@ -53,17 +53,28 @@ class MPCWorker
         'fullPaths'  => false,  // show system-absolute pathnames in output
         'debug'      => false,  // show tons of unorganized output
         'quiet'      => false,  // show less output... different output
+        'extensions' => 'flac,mp3,ogg',  // extensions to look for on music files
 
         'rawCmd'     => null,   // overrides everything, execute args for mpc
 
         // latest-mode params
         'latestRoot' => '/storage/music/tmp/stage2',  // root dir for latest music
         'mpdRoot'    => '/storage/music',             // root dir of mpd
-        'deep'       => 2,      // how many dirs deep to look
+        'deep'       => 2,                            // how many dirs deep to look
 
         // internal only
-        'mpcCmd'     => null,   // full mpc cmd prefix: binary, host, port
+        'mpcCmd'     => null,  // full mpc cmd prefix: binary, host, port
+        'extRegex'   => null,  // regex to recognize music file extensions
+        'btRandom'   => null,  // "latest": using toplevel picking? false = all music
+        'alfredMode' => false, // do certain things for an alfred plugin
     );
+
+    /**
+     * Actual params being used
+     *
+     * @var array
+     */
+    protected static $params = array();
 
     /**
      * Top-level directory map (short code => full path)
@@ -88,26 +99,11 @@ class MPCWorker
     protected static $toplevelDirs = array();
 
     /**
-     * Are we picking music from only defined toplevels? if false, 
-     * full-collection randomness is used.
-     *
-     * @var boolean
-     */
-    protected static $btRandom = null;
-
-    /**
      * Resulting array of "mpc ls /" just so we don't have to keep asking for it.
      *
      * @var array
      */
     protected static $rootCache = array();
-
-    /**
-     * Actual params being used
-     *
-     * @var array
-     */
-    protected static $params = array();
 
     /**
      * Protected contructor. Invoke this object with runFromCLIArguments()
@@ -122,6 +118,11 @@ class MPCWorker
               (self::$params['mpc']  ? self::$params['mpc'] : 'mpc')
             . (self::$params['host'] ? ' -h ' . self::$params['host'] : '')
             . (self::$params['port'] ? ' -p ' . self::$params['port'] : '');
+
+        // Build regex to look for music file extensions
+        self::$params['extRegex'] = '/(\.'
+            . implode('|\.', split(',', self::$params['extensions']))
+            . ')$/i';
 
         if (self::$params['debug']) {
             print_r(self::$params);
@@ -148,24 +149,26 @@ class MPCWorker
 
         self::$toplevelMap  = isset($map) && is_array($map) ? $map : array();
         self::$toplevelDirs = array_values(self::$toplevelMap);
-        self::$btRandom     = (bool)self::$toplevelMap;
+        $params['btRandom'] = (bool)self::$toplevelMap;
 
-        $params = array();
         $myargs = array();
+        $params = array(
+            'btRandom'   => (bool)self::$toplevelMap,
+            'alfredMode' => null,
+        );
 
         array_shift($argv);  // take off the script name. useless.
 
         // I don't like this code much at all. It splits up a single arg into 
         // multiple ones so my alfred extension works. (Alfred sends all 
         // parameters, including spaces, as a single argument.)
-        $alfredMode = false;
         foreach ($argv as $av) {
             if ($av == '--alfred') {
-                $alfredMode = true;
+                $params['alfredMode'] = true;
                 break;
             }
         }
-        if ($alfredMode) {
+        if ($params['alfredMode']) {
             foreach ($argv as $av) {
                 if ($av == '--alfred') continue;
                 foreach (split(' ', $av) as $c) {
@@ -173,7 +176,6 @@ class MPCWorker
                 }
             }
         } else $myargs = $argv;
-
 
         while ($myargs) {
             switch ($arg = array_shift($myargs)) {
@@ -192,7 +194,7 @@ class MPCWorker
             case '--list': case '-l':
                 $params['action'] = 'list';
                 break;
-            case '--simple': case '-i':
+            case '--simple': case '-s':
                 $params['action'] = 'list';
                 $params['simpleOut'] = true;
                 break;
@@ -253,14 +255,15 @@ class MPCWorker
                 $params['num'] = $arg;
                 break;
             case '--by-toplevel': case '-bt':
-                $params['bt'] = true;
-                if ($arg = array_shift($myargs)) {
-                    if (self::getToplevel($arg)) {
-                        $params['bt'] = $arg;
-                    } else {
-                        array_unshift($myargs, $arg); // put it back
-                    }
+                $params['bt'] = null;
+                if (($arg = array_shift($myargs))
+                  && array_key_exists($arg, self::$toplevelMap)
+                ) {
+                    $params['bt'] = $arg;
+                } else if ($arg) {
+                    array_unshift($myargs, $arg); // put it back
                 }
+                $params['bt'] = $params['bt'] ?: self::getToplevel();
                 break;
             case '--get-toplevels':
                 // imma keep dis secret. only really needed for the web interface.
@@ -299,7 +302,10 @@ class MPCWorker
         $final = array_merge(self::$paramDefaults,
             isset($p) && is_array($p) ? $p : array());
 
-        // split the mode parmeter by the , and apply each.
+        // add on the mode settings
+        if ($params['alfredMode'] && array_key_exists('alfred', $final['modes'])) {
+            $final = array_merge($final, $final['modes']['alfred']);
+        }
         if (array_key_exists('mode', $params)) {
             foreach (split(',', $params['mode']) as $mode) {
                 if (array_key_exists('modes', $final)
@@ -315,8 +321,10 @@ class MPCWorker
         // command-line params last !
         $final = array_merge($final, $params);
 
-        $w = new self($final);
-        $w->invoke();
+        $w    = new self($final);
+        $func = self::$params['func'] ?: 'help';
+
+        $w->$func();
     }
 
     /**
@@ -342,7 +350,7 @@ Subjects (You need one of these):
 
 Action Overrides (Default is to replace MPD playlist and hit play):
  -l,  --list           List only mode
- -i,  --simple         Simple list only mode
+ -s,  --simple         Simple list only mode
  -b,  --deadbeef       Add to deadbeef
       --raw            The rest of the command line will go straight to mpc
 
@@ -387,17 +395,6 @@ alias mta='$self --this-album'
 alias mla='$self --latest'
 ";
         exit;
-    }
-
-    /**
-     * Invoke the func param and get on with it !
-     *
-     * @return null
-     */
-    public function invoke()
-    {
-        $func = self::$params['func'] ?: 'help';
-        $this->$func();
     }
 
     /**
@@ -472,22 +469,27 @@ alias mla='$self --latest'
      */
     public function getRandomTrack()
     {
-        $dirs = $this->lsStartDir();
-        $cur  = $dirs[rand(0, count($dirs) - 1)];
+        $dirs = null;
+        $cur  = null;
 
-        while (!preg_match('/(\.flac|\.mp3|\.ogg)$/i', $cur)) {
-            if (!$dirs) {
-                self::out("Hit a dead end: $cur", array('debug' => true));
-                $dirs = $this->lsStartDir();
-                $cur  = $dirs[rand(0, count($dirs) - 1)];
-                echo "[$cur]\n";
-                continue;
+        while (true) {  // i don't *think* this could be infinite . . . :D
+            if ($dirs) {
+                $cur = $dirs[rand(0, count($dirs) - 1)];
+            } else {
+                // if we have cur, then we this isn't our first iteration.
+                if ($cur) self::out("Hit a dead end: $cur", array('debug' => true));
+
+                if ($dirs = $this->lsStartDir()) {
+                    $cur = $dirs[rand(0, count($dirs) - 1)];
+                } else continue;
             }
-            $dirs = $this->lsDir($cur);
-            $cur  = $dirs[rand(0, count($dirs) - 1)];
-        }
 
-        return $cur;
+            if (self::hasInterestingExtension($cur)) {
+                return $cur;
+            }
+
+            $dirs = $this->lsDir($cur);
+        }
     }
 
     /**
@@ -499,7 +501,7 @@ alias mla='$self --latest'
     {
         $dirs = array();
 
-        if (self::$btRandom) {
+        if (self::$params['btRandom']) {
 
             $tl = self::$params['bt']
                 ? self::getToplevel(self::$params['bt'])
@@ -510,7 +512,7 @@ alias mla='$self --latest'
                 // no more by-toplevel randomness anymore.
                 self::out("Toplevel '$tl' is empty or missing. Toplevel dirs "
                     . 'are disabled.', array('debug' => true));
-                self::$btRandom = false;
+                self::$params['btRandom'] = false;
             }
         }
 
@@ -578,6 +580,10 @@ alias mla='$self --latest'
      */
     protected function act($items, array $o = array())
     {
+        if (!$items) {
+            self::out('No items found.', array('fatal' => true));
+        }
+
         $o = array_merge(array(
             'colorify' => false,
         ), $o);
@@ -768,7 +774,7 @@ alias mla='$self --latest'
     }
 
     /**
-     * "Standard" method to colorify a single result or array of them
+     * Colorify a single result or array of them
      *
      * @param string|array $str
      * @param array $o
@@ -811,6 +817,18 @@ alias mla='$self --latest'
     }
 
     /**
+     * Returns true if the provided file has a file extension we might like to 
+     * add to a playlist
+     *
+     * @param string $name
+     * @return boolean
+     */
+    protected static function hasInterestingExtension($name)
+    {
+        return preg_match(self::$params['extRegex'], $name);
+    }
+
+    /**
      * @param string $short
      * @return string (the full toplevel dir name)
      */
@@ -824,7 +842,7 @@ alias mla='$self --latest'
             }
         }
 
-        return self::getSelectionFrom(self::$toplevelMap);
+        return self::getSelectionFrom(self::$toplevelMap, false, true);
     }
 
     /**
@@ -832,9 +850,11 @@ alias mla='$self --latest'
      *
      * @param array $options
      * @param boolean $multi
+     * @param boolean $returnKeys
      * @return array|string
      */
-    protected static function getSelectionFrom(array $options, $multi = false)
+    protected static function getSelectionFrom(array $options,
+        $multi = false, $returnKeys = false)
     {
         // is the array associative?
         $isAssoc = array_keys($options) !== range(0, count($options) - 1);
@@ -843,7 +863,7 @@ alias mla='$self --latest'
         foreach ($options as $k => $v) {
             if (is_array($v)) $v = isset($v['disp']) ? $v['disp'] : $v['name'];
             if ($isAssoc) {
-                echo "    $k. $v\n";
+                echo self::col("    $k.", 'green') . " $v\n";
             } else {
                 echo self::col(sprintf('%4d. ', $k+1), 'green') . "$v\n";
             }
@@ -856,32 +876,35 @@ alias mla='$self --latest'
             echo "  > ";
             $choice = trim(fgets($stdin));
             $fail   = false;
-            if ($multi) {
+            if (!$choice) {
+                self::out('Fine.'); die();
+            } else if ($multi) {
                 $ret = array();
                 foreach (preg_split('/[, ]+/', $choice) as $bit) {
-                    if ($isAssoc) {                  // associative arrays
+                    if ($bit == 'a') {
+                        self::$params['append'] = true;
+                    } else if ($isAssoc) {           // associative arrays
                         if (!array_key_exists($bit, $options)) {
                             self::out("Invalid input: $bit", array('warn' => true));
                             $fail = true;
                         }
-                        $ret[] = $options[$bit];
+                        $ret[] = $returnKeys ? $bit : $options[$bit];
                     } else if (ctype_digit($bit)) {  // numeric-indexed array
                         $b = $bit - 1;
                         if (!array_key_exists($b, $options)) {
                             self::out("Invalid input: $bit", array('warn' => true));
                             $fail = true;
                         }
-                        $ret[] = $options[$b];
-                    } else if (preg_match('/^(\d+)-(\d+)$/', $bit, $m)
+                        $ret[] = $returnKeys ? $b : $options[$b];
+                    } else if ((preg_match('/^(\d+)-(\d+)$/', $bit, $m)
                       && $m[1] > 0 && $m[1] <= count($options)
                       && $m[2] > 0 && $m[2] <= count($options)
-                      && $m[1] <= $m[2]
+                      && $m[1] <= $m[2])
+                        || ($bit == 'A' && ($m[1] = 1) && ($m[2] = count($options)))
                     ) {                             // also for numeric-indexed arrays
                         for ($i=$m[1]; $i<=$m[2]; $i++) {
-                            $ret[] = $options[$i-1];
+                            $ret[] = $returnKeys ? ($i-1) : $options[$i-1];
                         }
-                    } else if ($bit == 'a') {
-                        self::$params['append'] = true;
                     } else {
                         self::out("Invalid input: $bit", array('warn' => true));
                         $fail = true;
@@ -892,8 +915,7 @@ alias mla='$self --latest'
                 if (!array_key_exists($c, $options)) {
                     self::out("Invalid input: $choice", array('warn' => true));
                     $fail = true;
-                }
-                $ret = $options[$c];
+                } else $ret = $returnKeys ? $c : $options[$c];
             }
         } while ($fail);
         fclose($stdin);
@@ -966,12 +988,13 @@ alias mla='$self --latest'
     {
         if (is_null($d)) $d = self::$params['deep'];
 
-        $dirs = array();  // each is: array('name' => name, 'mtime' => mtime);
-        $glob = glob("$dir/*", GLOB_ONLYDIR);
+        $results = array();  // each is: array('name' => name, 'mtime' => mtime);
+        // $glob = glob("$dir/*", GLOB_ONLYDIR);
+        $glob = glob("$dir/*");
         if (!$glob) return array();
         foreach ($glob as $t) {
 
-            // if it's the top level of the search, make sure we skip any dirs in 
+            // if it's the top level of the search, make sure we skip any results in 
             // the exclude array.
             if ($d == self::$params['deep']) {
                 preg_match('/([^\/]+)$/', $t, $matches);
@@ -980,17 +1003,23 @@ alias mla='$self --latest'
                 }
             }
 
-            if ($d > 1) {
-                $dirs = array_merge($dirs, $this->recurse($t, $d - 1));
+            $isfile = is_file($t);
+
+            if ($d > 1 && !$isfile) {
+                $results = array_merge($results, $this->recurse($t, $d - 1));
+            } else if ($d > 1 && $isfile) {
+                // a file found, but we're not deep enough yet; ignore.
+            } else if ($isfile && !self::hasInterestingExtension($t)) {
+                // a file found, but doesn't have an extension we want
             } else {
                 $s = stat($t);
-                $dirs[] = array(
+                $results[] = array(
                     'name'  => $t,
                     'mtime' => $s['mtime']
                 );
             }
         }
 
-        return $dirs;
+        return $results;
     }
 }
