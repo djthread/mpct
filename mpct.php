@@ -393,6 +393,7 @@ alias msa='$self --search-artist'
 alias msb='$self --search-album'
 alias mta='$self --this-album'
 alias mla='$self --latest'
+alias mr='$self --raw'
 ";
         exit;
     }
