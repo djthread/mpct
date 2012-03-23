@@ -682,7 +682,12 @@ alias mr='$self --raw'
         $retval = null;
         $cmd    = self::$params['mpcCmd'] .  ' ' . $cmd;
         $out    = $this->cmd($cmd, $echoCmd, $echoResult, $retval);
-        $out    = array_filter($out,
+
+        if ($out[0] == 'error: Connection refused') {
+            self::out($out[0], array('fatal' => true));
+        }
+
+        $out = array_filter($out,
             function ($i) { return substr($i, 0, 7) != 'error: '; });
 
         if ($retval != 0 && !$o['failok']) {
