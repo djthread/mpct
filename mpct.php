@@ -35,7 +35,8 @@ class MPCWorker
     protected static $paramDefaults = array(
         'func'       => null,   // Actual function to call. It will gather the target(s)
         'action'     => 'mpc',  // 'mpc' to add to mpd, 'deadbeef' to send it there,
-                                //   or 'list' to simply list the hits
+                                //   exe to execute cmds, or 'list' to simply list the
+                                //   hits
 
         'host'       => null,   // override the host default/environment
         'port'       => null,   // override the host default/environment
@@ -62,11 +63,16 @@ class MPCWorker
         'mpdRoot'    => '/storage/music',             // root dir of mpd
         'deep'       => 2,                            // how many dirs deep to look
 
+        // override if you must...
+        'defNumTrks' => 10,    // default num for --random-tracks
+        'defNumAlbs' => 10,    // default num for --random-albums
+        'defNumLa'   => 10,    // default num for --latest
+        'alfredMode' => false, // do certain things for an alfred plugin
+
         // internal only
         'mpcCmd'     => null,  // full mpc cmd prefix: binary, host, port
         'extRegex'   => null,  // regex to recognize music file extensions
         'btRandom'   => null,  // "latest": using toplevel picking? false = all music
-        'alfredMode' => false, // do certain things for an alfred plugin
     );
 
     /**
@@ -123,6 +129,22 @@ class MPCWorker
         self::$params['extRegex'] = '/(\.'
             . implode('|\.', split(',', self::$params['extensions']))
             . ')$/i';
+
+        if (!self::$params['num']) {
+            switch (self::$params['func']) {
+            case 'randomTracks':
+                self::$params['num'] = self::$params['defNumTrks'];
+                break;
+            case 'randomAlbums':
+                self::$params['num'] = self::$params['defNumAlbs'];
+                break;
+            case 'latest':
+                self::$params['num'] = self::$params['defNumLa'];
+                break;
+            default:
+                self::$params['num'] = 1;
+            }
+        }
 
         if (self::$params['debug']) {
             print_r(self::$params);
@@ -188,13 +210,13 @@ class MPCWorker
             case '--mpc':
                 $params['mpc'] = array_shift($myargs);
                 break;
-            case '--refresh': case '-r':
+            case '--refresh': case '-r': case 'r':
                 $params['refresh'] = true;
                 break;
-            case '--list': case '-l':
+            case '--list': case '-l': case 'l':
                 $params['action'] = 'list';
                 break;
-            case '--simple': case '-s':
+            case '--simple': case '-s': case 's':
                 $params['action'] = 'list';
                 $params['simpleOut'] = true;
                 break;
@@ -203,49 +225,47 @@ class MPCWorker
                 $params['rawCmd'] = implode(' ', $myargs);
                 $myargs = array();  // all done!
                 break;
-            case '--latest': case '-la':
-                if (!isset($params['num'])) $params['num'] = 20;
+            case '--latest': case '-la': case 'la':
                 $params['func'] = 'latest';
                 break;
-            case '--search-artist': case '-sa':
+            case '--search-artist': case '-sa': case 'sa':
                 $params['func']       = 'search';
                 $params['searchType'] = 'artist';
                 $params['search']     = array_shift($myargs);
                 break;
-            case '--search-album': case '-sb':
+            case '--search-album': case '-sb': case 'sb':
                 $params['func']       = 'search';
                 $params['searchType'] = 'album';
                 $params['search']     = array_shift($myargs);
                 break;
-            case '--search-title': case '-st':
+            case '--search-title': case '-st': case 'st':
                 $params['func']       = 'search';
                 $params['searchType'] = 'title';
                 $params['search']     = array_shift($myargs);
                 break;
-            case '--random-tracks': case '-rt':
-                if (!isset($params['num'])) $params['num'] = 10;
+            case '--random-tracks': case '-rt': case 'rt':
                 $params['func'] = 'randomTracks';
                 break;
-            case '--random-albums': case '-ra':
-                if (!isset($params['num'])) $params['num'] = 5;
+            case '--random-albums': case '-ra': case 'ra':
                 $params['func'] = 'randomAlbums';
                 break;
-            case '--this-album': case '-ta':
+            case '--this-album': case '-ta': case 'ta':
                 $params['func'] = 'playThisAlbum';
                 break;
-            case '--choose': case '-c':
+            case '--choose': case '-c': case 'c':
                 $params['choose'] = true;
                 break;
-            case '--go': case '-g':
+            case '--go': case '-g': case 'g':
                 $params['choose'] = false;
                 break;
-            case '--append': case '-a':
+            case '--append': case '-a': case 'a':
                 $params['append'] = true;
                 break;
-            case '--execute': case '-x':
+            case '--execute': case '-x': case 'x':
+                $params['action'] = 'exe';
                 $params['exe'] = array_shift($myargs);
                 break;
-            case '--num': case '-n':
+            case '--num': case '-n': case 'n':
                 if (!($arg = array_shift($myargs))
                   || !ctype_digit($arg)
                 ) {
@@ -254,7 +274,7 @@ class MPCWorker
                 }
                 $params['num'] = $arg;
                 break;
-            case '--by-toplevel': case '-bt':
+            case '--by-toplevel': case '-bt': case 'bt':
                 $params['bt'] = null;
                 if (($arg = array_shift($myargs))
                   && array_key_exists($arg, self::$toplevelMap)
@@ -265,33 +285,30 @@ class MPCWorker
                 }
                 $params['bt'] = $params['bt'] ?: self::getToplevel();
                 break;
+            case '--full-paths': case '-f': case 'f':
+                $params['fullPaths'] = true;
+                break;
+            case '--debug': case '-d': case 'd':  // undocumented
+                $params['debug'] = true;
+                break;
+            case '--quiet': case '-q': case 'q':
+                $params['quiet'] = true;
+                break;
+            case '--mode': case '-o': case 'o':
+                if (!$arg = array_shift($myargs)) {
+                    die("Mode parameter was missing.\n");
+                }
+                $params['mode'] = $arg;
+                break;
+            case '--aliases': case '-al': case 'al':
+                $params['func'] = 'aliases';
+                break;
             case '--get-toplevels':
                 // imma keep dis secret. only really needed for the web interface.
                 foreach (self::$toplevelMap as $k => $v) {
                     echo "$k $v\n";
                 }
                 die();
-                break;
-            case '--full-paths': case '-f':
-                $params['fullPaths'] = true;
-                break;
-            case '--debug': case '-d':  // undocumented
-                $params['debug'] = true;
-                break;
-            case '--quiet': case '-q':
-                $params['quiet'] = true;
-                break;
-            case '--mode': case '-o':
-                if (!$arg = array_shift($myargs)) {
-                    die("Mode parameter was missing.\n");
-                }
-                $params['mode'] = $arg;
-                break;
-            case '--aliases': case '-al':
-                $params['func'] = 'aliases';
-                break;
-            case '--help': case '-?':
-                $params['func'] = 'help';
                 break;
             default:
                 die("what?: $arg");
@@ -352,6 +369,8 @@ Action Overrides (Default is to replace MPD playlist and hit play):
  -l,  --list           List only mode
  -s,  --simple         Simple list only mode
  -b,  --deadbeef       Add to deadbeef
+ -x,  --execute        Execute the argument for each result. X is replaced with
+                       the absolute location. eg. -x 'cp -av X /mnt/hdd'
       --raw            The rest of the command line will go straight to mpc
 
 Modifiers:
@@ -360,8 +379,6 @@ Modifiers:
  -c,  --choose         Select one or more from the results (default: on)
  -g,  --go             GO, use all results! (Disable choose mode)
  -a,  --append         Add tunage, preserving the current playlist
- -x,  --execute        The rest of the command line is a command to execute on each
-                       result. X is replaced with the absolute location for each.
       --mpc            Full path to mpc executable
  -h,  --host           set the target host (default: localhost)
  -p,  --port           set the target port (default: 6600)
@@ -372,6 +389,7 @@ Modifiers:
                        file to overwrite default params with. eg. -o mode1,mode2
  -al, --aliases        Nifty aliases. Recommended: $self -al >> ~/.bashrc
  -?,  --help           this.
+                (The leading hyphen is optional for short flags.)
 
 ";
         exit;
@@ -391,6 +409,7 @@ alias mrt='$self --random-tracks'
 alias mra='$self --random-albums'
 alias msa='$self --search-artist'
 alias msb='$self --search-album'
+alias mst='$self --search-title'
 alias mta='$self --this-album'
 alias mla='$self --latest'
 alias mr='$self --raw'
@@ -611,7 +630,12 @@ alias mr='$self --raw'
             // make a colorized display version if option is enabled
             if ($o['colorify']) $o['disp'] = self::colorify($x['name']);
 
-            if (self::$params['action'] == 'mpc') {
+            if (self::$params['action'] == 'exe' && self::$params['exe']) {
+                $cmd = str_replace('X',
+                    '"' . self::quotefix(self::$params['mpdRoot'] . '/' . $x['name']) . '"',
+                    self::$params['exe']);
+                $this->cmd($cmd, true, true);
+            } else if (self::$params['action'] == 'mpc') {
                 if ($i == 0 && !self::$params['append']) $this->mpc('clear');
                 $this->mpc('add "' . self::quotefix($x['name']) . '"',
                     !self::$params['quiet']);
@@ -624,13 +648,6 @@ alias mr='$self --raw'
                 echo "$disp\n";
             } else {
                 self::out("Action is what ({$this->action}) ?", array('fatal' => true));
-            }
-
-            if (self::$params['exe']) {
-                $cmd = str_replace('X',
-                    '"' . self::quotefix(self::$params['mpdRoot'] . '/' . $x['name']) . '"',
-                    self::$params['exe']);
-                $this->cmd($cmd, true, true);
             }
         }
 
@@ -683,7 +700,7 @@ alias mr='$self --raw'
         $cmd    = self::$params['mpcCmd'] .  ' ' . $cmd;
         $out    = $this->cmd($cmd, $echoCmd, $echoResult, $retval);
 
-        if ($out[0] == 'error: Connection refused') {
+        if (isset($out[0]) && $out[0] == 'error: Connection refused') {
             self::out($out[0], array('fatal' => true));
         }
 
@@ -949,7 +966,7 @@ alias mr='$self --raw'
         foreach ($target as &$t) {
             $t['disp'] = str_replace(self::$params['latestRoot'] . '/', '', $t['name']);
             if (!self::$params['simpleOut']) {
-                $t['disp'] = self::colorify($t['disp'], array('mtime', $t['mtime']));
+                $t['disp'] = self::colorify($t['disp'], array('mtime' => $t['mtime']));
             }
             $t['name'] = str_replace(self::$params['mpdRoot'] . '/', '', $t['name']);
         }
@@ -964,6 +981,10 @@ alias mr='$self --raw'
      */
     public function search()
     {
+        if (!self::$params['search']) {
+            self::out('Please provide a search term.', array('fatal' => true));
+        }
+
         if (self::$params['searchType'] == 'title') {
             $list = $this->mpc('search title "'
                   . self::quotefix(self::$params['search']) . '"');
