@@ -218,8 +218,9 @@ class MPCWorker
                 $params['choose'] = false;
                 break;
             case '--simple': case '-s': case 's':
-                $params['action'] = 'list';
+                $params['action']    = 'list';
                 $params['simpleOut'] = true;
+                $params['choose']    = false;
                 break;
             case '--raw': case '-w': case 'w':
                 $params['func'] = 'raw';
@@ -626,10 +627,9 @@ alias mr='$self --raw'
 
         $c = count($items);
         for ($i=0; $i<$c; $i++) {
+            // pull in current: if array values are simple strings, make it fancy
             $x = is_string($items[$i]) ? array('name' => $items[$i]) : $items[$i];
 
-            // make a colorized display version if option is enabled
-            if ($o['colorify']) $o['disp'] = self::colorify($x['name']);
 
             if (self::$params['action'] == 'exe' && self::$params['exe']) {
                 $cmd = str_replace('X',
@@ -645,8 +645,14 @@ alias mr='$self --raw'
                 $this->cmd('deadbeef "' . self::quotefix($x['name']) . '"',
                     !self::$params['quiet']);
             } else if (self::$params['action'] == 'list') {
-                $disp = isset($x['disp']) ? $x['disp'] : $x['name'];
-                echo "$disp\n";
+                // make a colorized display version if option is enabled
+                if ($o['colorify'] && !self::$params['simpleOut']) {
+                    echo  self::getnum($i+1, $c)
+                        . self::colorify($x['name'])
+                        . "\n";
+                } else {
+                    echo $x['name'] . "\n";
+                }
             } else {
                 self::out("Action is what ({$this->action}) ?", array('fatal' => true));
             }
@@ -775,6 +781,7 @@ alias mr='$self --raw'
     protected static function col($txt, $color)
     {
         $_colors = array(
+            'gray'        => "[1;30m",
             'light red'   => "[1;31m",
             'light green' => "[1;32m",
             'yellow'      => "[1;33m",
@@ -841,6 +848,18 @@ alias mr='$self --raw'
     }
 
     /**
+     * Get the nicely formatted number for our listing
+     *
+     * @param integer $num
+     * @param integer $total (count of the array being iterated)
+     */
+    protected function getnum($num, $total)
+    {
+        $nums = strlen((string)$total) + 1;
+        return self::col(sprintf("%{$nums}d. ", $num), 'green');
+    }
+
+    /**
      * Returns true if the provided file has a file extension we might like to 
      * add to a playlist
      *
@@ -884,12 +903,13 @@ alias mr='$self --raw'
         $isAssoc = array_keys($options) !== range(0, count($options) - 1);
 
         echo "\n";
+        $c = count($options);
         foreach ($options as $k => $v) {
             if (is_array($v)) $v = isset($v['disp']) ? $v['disp'] : $v['name'];
             if ($isAssoc) {
                 echo self::col("    $k.", 'green') . " $v\n";
             } else {
-                echo self::col(sprintf('%4d. ', $k+1), 'green') . "$v\n";
+                echo self::getnum($k+1, $c) . "$v\n";
             }
         }
         echo "\n";
@@ -897,7 +917,9 @@ alias mr='$self --raw'
         $stdin = fopen('php://stdin', 'r');
         $ret   = null;
         do {
-            echo "  > ";
+            echo  self::col('>', 'gray')
+                . self::col('>', 'green')
+                . self::col('> ', 'light green');
             $choice = trim(fgets($stdin));
             $fail   = false;
             if (!$choice) {
@@ -905,7 +927,7 @@ alias mr='$self --raw'
             } else if ($multi) {
                 $ret = array();
                 foreach (preg_split('/[, ]+/', $choice) as $bit) {
-                    if ($bit == 'a') {
+                    if ($bit == 'a') {               // a is an append shortcut
                         self::$params['append'] = true;
                     } else if ($isAssoc) {           // associative arrays
                         if (!array_key_exists($bit, $options)) {
@@ -920,12 +942,12 @@ alias mr='$self --raw'
                             $fail = true;
                         }
                         $ret[] = $returnKeys ? $b : $options[$b];
-                    } else if ((preg_match('/^(\d+)-(\d+)$/', $bit, $m)
+                    } else if ((preg_match('/^(\d+)-(\d+)$/', $bit, $m)  // ranges
                       && $m[1] > 0 && $m[1] <= count($options)
                       && $m[2] > 0 && $m[2] <= count($options)
                       && $m[1] <= $m[2])
                         || ($bit == 'A' && ($m[1] = 1) && ($m[2] = count($options)))
-                    ) {                             // also for numeric-indexed arrays
+                    ) {
                         for ($i=$m[1]; $i<=$m[2]; $i++) {
                             $ret[] = $returnKeys ? ($i-1) : $options[$i-1];
                         }
