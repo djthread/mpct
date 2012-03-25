@@ -221,7 +221,7 @@ class MPCWorker
                 $params['action'] = 'list';
                 $params['simpleOut'] = true;
                 break;
-            case '--raw':
+            case '--raw': case '-w': case 'w':
                 $params['func'] = 'raw';
                 $params['rawCmd'] = implode(' ', $myargs);
                 $myargs = array();  // all done!
@@ -372,7 +372,7 @@ Action Overrides (Default is to replace MPD playlist and hit play):
  -b,  --deadbeef       Add to deadbeef
  -x,  --execute        Execute the argument for each result. X is replaced with
                        the absolute location. eg. -x 'cp -av X /mnt/hdd'
-      --raw            The rest of the command line will go straight to mpc
+ -w,  --raw            The rest of the command line will go straight to mpc
 
 Modifiers:
  -bt, --by-toplevel    Ask which toplevel dir to use (a short code CAN follow)
