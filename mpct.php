@@ -215,6 +215,7 @@ class MPCWorker
                 break;
             case '--list': case '-l': case 'l':
                 $params['action'] = 'list';
+                $params['choose'] = false;
                 break;
             case '--simple': case '-s': case 's':
                 $params['action'] = 'list';
@@ -1017,7 +1018,10 @@ alias mr='$self --raw'
 
         $results = array();  // each is: array('name' => name, 'mtime' => mtime);
         // $glob = glob("$dir/*", GLOB_ONLYDIR);
-        $glob = glob("$dir/*");
+        $globTarget = "$dir/*";
+        if (self::$params['debug']) self::out("globbing: $globTarget");
+        $glob = glob($globTarget);
+        if (self::$params['debug']) self::out(print_r($glob,true));
         if (!$glob) return array();
         foreach ($glob as $t) {
 
