@@ -52,6 +52,7 @@ class MPCWorker
         'modes'      => array(),  // label => array of key/vals to override parameters
         'mode'       => null,   // selected label of modes array, if any
         'fullPaths'  => false,  // show system-absolute pathnames in output
+        'colors'     => true,   // use colors! yayy!! \o/
         'debug'      => false,  // show tons of unorganized output
         'quiet'      => false,  // show less output... different output
         'extensions' => 'flac,mp3,ogg',  // extensions to look for on music files
@@ -199,6 +200,8 @@ class MPCWorker
         foreach ($argv as $av) {
             if ($av == '--alfred') {
                 $params['alfredMode'] = true;
+                $params['colors']     = false;
+                $params['quiet']      = true;
                 break;
             }
         }
@@ -829,6 +832,10 @@ alias mr='$self --raw'
      */
     protected static function col($txt, $color)
     {
+        if (!self::$params['colors']) {
+            return $txt;
+        }
+
         $_colors = array(
             'gray'        => "[1;30m",
             'light red'   => "[1;31m",
