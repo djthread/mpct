@@ -324,7 +324,7 @@ class MPCWorker
                 break;
             case '--mode': case '-o': case 'o':
                 if (!$arg = array_shift($myargs)) {
-                    die("Mode parameter was missing.\n");
+                    self::out('Mode parameter was missing.', array('fatal' => true));
                 }
                 $params['mode'] = $arg;
                 break;
@@ -339,7 +339,7 @@ class MPCWorker
                 die();
                 break;
             default:
-                die("what?: $arg");
+                self::out("What?: $arg", array('fatal' => true));
             }
         }
 
@@ -358,7 +358,7 @@ class MPCWorker
                 ) {
                     $final = array_merge($final, $final['modes'][$mode]);
                 } else {
-                    die("Couldn't find mode: $mode\n");
+                    self::out("Couldn't find mode: $mode", array('fatal' => true));
                 }
             }
         }
