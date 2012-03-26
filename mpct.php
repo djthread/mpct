@@ -514,11 +514,13 @@ alias mr='$self --raw'
         $album  = null;
 
         do {
-            $album = $albums[rand(0, count($albums) - 1)];
-        } while (!$album);
+            do {
+                $album = $albums[rand(0, count($albums) - 1)];
+            } while (!$album);
 
-        $files = $this->mpc('find album "' . self::quotefix($album) . '"');
-        $file  = null;
+            $files = $this->mpc('find album "' . self::quotefix($album) . '"');
+            $file  = null;
+        } while (!$files);
 
         do {
             $file = $files[rand(0, count($files) - 1)];
