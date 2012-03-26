@@ -25,7 +25,7 @@ MPCWorker::runFromCLIArguments($argv);
 
 class MPCWorker
 {
-    const VERSION = '0.5';
+    const VERSION = '0.6';
 
     /**
      * The parameter defaults, overridden by the config file & command line
@@ -41,7 +41,7 @@ class MPCWorker
         'host'       => null,   // override the host default/environment
         'port'       => null,   // override the host default/environment
         'mpc'        => null,   // full path/file to the mpc binary
-        'refresh'    => false,  // refresh MPD's latestRoot / album cache first
+        'refresh'    => false,  // refresh MPD's latestRoot
         'num'        => null,   // num of results. defaults depending on action.
         'append'     => false,  // just add to the end of the playlist
         'choose'     => true,   // choose from the results !
@@ -82,6 +82,20 @@ class MPCWorker
      * @var array
      */
     protected static $params = array();
+
+    /**
+     * The actual subject items we want to operate on
+     *
+     * @var array
+     */
+    protected static $subject = array();
+
+    /**
+     * Will be true when the user uses 'm' at the selection prompt.
+     *
+     * @var boolean
+     */
+    protected static $more = false;
 
     /**
      * Top-level directory map (short code => full path)
@@ -160,11 +174,7 @@ class MPCWorker
 
         // For refresh flag. Exact action depends on the func.
         if (self::$params['refresh']) {
-            if (self::$params['func'] == 'latest') {
-                $this->refreshMpd();
-            } else if (self::$params['func'] == 'randomAlbums') {
-                // $this->refreshAlbumCache();
-            }
+            $this->refreshMpd();
         }
     }
 
@@ -267,7 +277,8 @@ class MPCWorker
                 $params['func'] = 'randomAlbums';
                 break;
             case '--this-album': case '-ta': case 'ta':
-                $params['func'] = 'playThisAlbum';
+                $params['func']   = 'playThisAlbum';
+                $params['choose'] = false;
                 break;
             case '--choose': case '-c': case 'c':
                 $params['choose'] = true;
@@ -358,7 +369,12 @@ class MPCWorker
         $w    = new self($final);
         $func = self::$params['func'] ?: 'help';
 
-        $w->$func();
+        do {
+            self::$more = false;
+            $w->$func();
+        } while (self::$more);
+
+        $w->act();
     }
 
     /**
@@ -399,8 +415,7 @@ Modifiers:
       --mpc            Full path to mpc executable
  -h,  --host           set the target host (default: localhost)
  -p,  --port           set the target port (default: 6600)
- -r,  --refresh        If mode is latest, Refresh MPD's latestRoot first. If
-                       it's random albums, refresh the album list cache first.
+ -r,  --refresh        Refresh MPD's latestRoot first.
  -f,  --full-paths     Show system-absolute pathnames in output
  -q,  --quiet          Less output
  -o,  --mode           Specify the key(s) of the 'modes' array in the config
@@ -448,7 +463,7 @@ alias mr='$self --raw'
             $tracks[] = $this->getRandomTrack();
         }
 
-        $this->act($tracks, array('colorify' => true));
+        $this->add($tracks);
     }
 
     /**
@@ -468,7 +483,7 @@ alias mr='$self --raw'
             $albums[] = $matches[1];
         }
 
-        $this->act($albums, array('colorify' => true));
+        $this->add($albums);
     }
 
     /**
@@ -487,7 +502,7 @@ alias mr='$self --raw'
                 array('fatal' => true));
         }
 
-        $this->act(array($matches[1]));
+        $this->add(array($matches[1]));
     }
 
     /**
@@ -512,6 +527,11 @@ alias mr='$self --raw'
     {
         $albums = self::$albumCache ?: (self::$albumCache = $this->mpc('list album'));
         $album  = null;
+
+        if (!$albums) {
+            self::out('Failed to find any albums via "mpc list album" ?',
+                array('fatal' => true));
+        }
 
         do {
             do {
@@ -639,66 +659,77 @@ alias mr='$self --raw'
     }
 
     /**
-     * Take the chosen action on a given item with an mpd-relative path !
+     * Add items as subjects to be operated on via act()
      *
-     * If an array is passed in, I'll assume each element has a 'name' element
-     *
-     * @param string|array $items
+     * @param array $items
      * @param array $o
      * @return null
      */
-    protected function act($items, array $o = array())
+    protected function add(array $items, array $o = array())
     {
-        if (!$items) {
-            self::out('No items found.', array('fatal' => true));
-        }
-
-        $o = array_merge(array(
-            'colorify' => false,
-        ), $o);
-
-        if (self::$params['debug']) echo "\n";
-
         if (self::$params['choose']) {
-            if ($o['colorify']) {
-                foreach ($items as &$i) {
-                    if (is_array($i)) {
-                        $i['disp'] = self::colorify($i['name']);
-                    } else {
-                        $i = array('name' => $i, 'disp' => self::colorify($i));
-                    }
+            foreach ($items as &$i) {
+                if (is_array($i)) {
+                    $i['disp'] = isset($i['disp']) ? $i['disp']
+                               : self::colorify($i['name']);
+                } else {
+                    $i = array('name' => $i, 'disp' => self::colorify($i));
                 }
             }
             $items = $this->getSelectionFrom($items, true);
         }
 
-        $c = count($items);
-        for ($i=0; $i<$c; $i++) {
-            // pull in current: if array values are simple strings, make it fancy
-            $x = is_string($items[$i]) ? array('name' => $items[$i]) : $items[$i];
+        // Normalize for our subject array
+        foreach ($items as &$i) {
+            if (is_array($i)) {
+                $i = $i['name'];
+            }
+        }
 
+        self::$subject = array_merge(self::$subject, $items);
+    }
+
+    /**
+     * Take the chosen action on a given item with an mpd-relative path !
+     *
+     * If an array is passed in, I'll assume each element has a 'name' element
+     *
+     * @return null
+     */
+    protected function act()
+    {
+        if (self::$params['debug']) print_r(self::$subject);
+
+        if (!self::$subject) {
+            self::out('No items found.', array('fatal' => true));
+        }
+
+        $c = count(self::$subject);
+        for ($i=0; $i<$c; $i++) {
+
+            $x = self::$subject[$i];
 
             if (self::$params['action'] == 'exe' && self::$params['exe']) {
                 $cmd = str_replace('X',
-                    '"' . self::quotefix(self::$params['mpdRoot'] . '/' . $x['name']) . '"',
-                    self::$params['exe']);
+                    '"' . self::quotefix(self::$params['mpdRoot'] . '/'
+                    . $x) . '"', self::$params['exe']);
                 $this->cmd($cmd, true, true);
             } else if (self::$params['action'] == 'mpc') {
-                if ($i == 0 && !self::$params['append']) $this->mpc('clear');
-                $this->mpc('add "' . self::quotefix($x['name']) . '"',
-                    !self::$params['quiet']);
-                if ($i == 0 && !self::$params['append']) $this->mpc('play');
+                $echo = !self::$params['quiet'];
+                if ($i == 0 && !self::$params['append']) $this->mpc('clear', $echo);
+                $this->mpc('add "' . self::quotefix($x) . '"', $echo);
+                if ($i == 0 && !self::$params['append']) $this->mpc('play', $echo);
             } else if (self::$params['action'] == 'deadbeef') {
-                $this->cmd('deadbeef "' . self::quotefix($x['name']) . '"',
+                $this->cmd('deadbeef "' . self::quotefix($x) . '"',
                     !self::$params['quiet']);
             } else if (self::$params['action'] == 'list') {
                 // make a colorized display version if option is enabled
-                if ($o['colorify'] && !self::$params['simpleOut']) {
-                    echo  self::getnum($i+1, $c)
-                        . self::colorify($x['name'])
-                        . "\n";
+                if (self::$params['simpleOut']) {
+                    echo $x . "\n";
                 } else {
-                    echo $x['name'] . "\n";
+                    echo  self::getnum($i+1, $c)
+                        . self::colorify($x)
+                        . "\n";
                 }
             } else {
                 self::out("Action is what ({$this->action}) ?", array('fatal' => true));
@@ -734,13 +765,6 @@ alias mr='$self --raw'
             }
         } while ($found);
         echo "DB Updated!\n";
-    }
-
-    /**
-     * Refresh the list of albums -- nevermind maybe i don't need this.
-     */
-    protected function refreshAlbumCache()
-    {
     }
 
     /**
@@ -871,6 +895,10 @@ alias mr='$self --raw'
      */
     protected static function colorify($in, array $o = array())
     {
+        if (!self::$params['colors']) {
+            return $in;
+        }
+
         $arr   = $in;
         $isArr = is_array($in);
 
@@ -973,33 +1001,46 @@ alias mr='$self --raw'
         echo "\n";
 
         $stdin = fopen('php://stdin', 'r');
-        $ret   = null;
+        $ret   = array();
         do {
             echo  self::col('>', 'gray')
                 . self::col('>', 'green')
                 . self::col('> ', 'light green');
             $choice = trim(fgets($stdin));
-            $fail   = false;
+            $retry  = false;
             if (!$choice) {
-                self::out('Fine.'); die();
+                if (self::$subject) {
+                    break;
+                } else {
+                    self::out('Fine.'); die();
+                }
             } else if ($multi) {
                 $ret = array();
                 foreach (preg_split('/[, ]+/', $choice) as $bit) {
                     if ($bit == 'a') {               // a is an append shortcut
                         self::$params['append'] = true;
+                    } else if ($bit == 'm') {        // user wants another list
+                        self::$more = true;
                     } else if ($isAssoc) {           // associative arrays
                         if (!array_key_exists($bit, $options)) {
                             self::out("Invalid input: $bit", array('warn' => true));
-                            $fail = true;
-                        }
-                        $ret[] = $returnKeys ? $bit : $options[$bit];
+                            $retry = true;
+                        } else $ret[] = $returnKeys ? $bit : $options[$bit];
+                    } else if (in_array($bit, array('?', 'h'))) {
+                        echo "\nSeparate parameters with spaces or commas.\n"
+                            . "\t1   - Select option #1\n"
+                            . "\t1-5 - Select options #1 through #5\n"
+                            . "\tA   - Select all listed options\n"
+                            . "\ta   - Enable append mode (same as -a parameter)\n"
+                            . "\tm   - List another set of results after this one\n"
+                            . "\th   - this help :)\n\n";
+                        $retry = true;
                     } else if (ctype_digit($bit)) {  // numeric-indexed array
                         $b = $bit - 1;
                         if (!array_key_exists($b, $options)) {
                             self::out("Invalid input: $bit", array('warn' => true));
-                            $fail = true;
-                        }
-                        $ret[] = $returnKeys ? $b : $options[$b];
+                            $retry = true;
+                        } else $ret[] = $returnKeys ? $b : $options[$b];
                     } else if ((preg_match('/^(\d+)-(\d+)$/', $bit, $m)  // ranges
                       && $m[1] > 0 && $m[1] <= count($options)
                       && $m[2] > 0 && $m[2] <= count($options)
@@ -1011,17 +1052,17 @@ alias mr='$self --raw'
                         }
                     } else {
                         self::out("Invalid input: $bit", array('warn' => true));
-                        $fail = true;
+                        $retry = true;
                     }
                 }
             } else {
                 $c = $isAssoc ? $choice : $choice-1;
                 if (!array_key_exists($c, $options)) {
                     self::out("Invalid input: $choice", array('warn' => true));
-                    $fail = true;
+                    $retry = true;
                 } else $ret = $returnKeys ? $c : $options[$c];
             }
-        } while ($fail);
+        } while ($retry);
         fclose($stdin);
 
         return $ret;
@@ -1035,6 +1076,9 @@ alias mr='$self --raw'
     public function latest()
     {
         $dirs = $this->recurse(self::$params['latestRoot']);
+
+        if (!$dirs) self::out("Couldn't find anything in latestRoot: "
+            . self::$params['latestRoot'], array('fatal' => true));
 
         // Sort them by mod time
         usort($dirs, function($a, $b) {
@@ -1052,7 +1096,7 @@ alias mr='$self --raw'
             $t['name'] = str_replace(self::$params['mpdRoot'] . '/', '', $t['name']);
         }
 
-        $this->act($target);
+        $this->add($target);
     }
 
     /**
@@ -1082,7 +1126,9 @@ alias mr='$self --raw'
             }
         }
 
-        $this->act($list, array('colorify' => true));
+        if (!$list) self::out('No results :(', array('fatal' => true));
+
+        $this->add($list);
     }
 
     /**
