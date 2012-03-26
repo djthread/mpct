@@ -41,7 +41,7 @@ class MPCWorker
         'host'       => null,   // override the host default/environment
         'port'       => null,   // override the host default/environment
         'mpc'        => null,   // full path/file to the mpc binary
-        'refresh'    => false,  // refresh MPD's latestRoot first
+        'refresh'    => false,  // refresh MPD's latestRoot / album cache first
         'num'        => null,   // num of results. defaults depending on action.
         'append'     => false,  // just add to the end of the playlist
         'choose'     => true,   // choose from the results !
@@ -112,6 +112,13 @@ class MPCWorker
     protected static $rootCache = array();
 
     /**
+     * Array of albums, loaded from the cache at ~/.mpct/albumCache
+     *
+     * @var array
+     */
+    protected static $albumCache = array();
+
+    /**
      * Protected contructor. Invoke this object with runFromCLIArguments()
      *
      * @param array $params
@@ -150,8 +157,13 @@ class MPCWorker
             print_r(self::$params);
         }
 
+        // For refresh flag. Exact action depends on the func.
         if (self::$params['refresh']) {
-            $this->refreshMpd();
+            if (self::$params['func'] == 'latest') {
+                $this->refreshMpd();
+            } else if (self::$params['func'] == 'randomAlbums') {
+                // $this->refreshAlbumCache();
+            }
         }
     }
 
@@ -384,7 +396,8 @@ Modifiers:
       --mpc            Full path to mpc executable
  -h,  --host           set the target host (default: localhost)
  -p,  --port           set the target port (default: 6600)
- -r,  --refresh        Refresh MPD's latestRoot first
+ -r,  --refresh        If mode is latest, Refresh MPD's latestRoot first. If
+                       it's random albums, refresh the album list cache first.
  -f,  --full-paths     Show system-absolute pathnames in output
  -q,  --quiet          Less output
  -o,  --mode           Specify the key(s) of the 'modes' array in the config
@@ -487,9 +500,38 @@ alias mr='$self --raw'
     /**
      * Returns the full path to a random track
      *
-     * @return null
+     * This "new" version works by loading a list of all albums, picking one,
+     * then choosing a track at random from that.
+     *
+     * @return string
      */
     public function getRandomTrack()
+    {
+        $albums = self::$albumCache ?: (self::$albumCache = $this->mpc('list album'));
+        $album  = null;
+
+        do {
+            $album = $albums[rand(0, count($albums) - 1)];
+        } while (!$album);
+
+        $files = $this->mpc('find album "' . self::quotefix($album) . '"');
+        $file  = null;
+
+        do {
+            $file = $files[rand(0, count($files) - 1)];
+        } while (!$file);
+
+        return $file;
+    }
+
+    /**
+     * Returns the full path to a random track
+     *
+     * This "old" version works by recursing the tree. It's not random enough.
+     *
+     * @return string
+     */
+    public function getRandomTrackOld()
     {
         $dirs = null;
         $cur  = null;
@@ -687,6 +729,13 @@ alias mr='$self --raw'
             }
         } while ($found);
         echo "DB Updated!\n";
+    }
+
+    /**
+     * Refresh the list of albums -- nevermind maybe i don't need this.
+     */
+    protected function refreshAlbumCache()
+    {
     }
 
     /**
