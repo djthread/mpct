@@ -9,19 +9,42 @@ If you prefer all your randomness to be across the full collection, simply empty
 
 Usage:
 
-    -h,  --host           set the target host (default: localhost)
-    -p,  --port           set the target port (default: 6600)
-    -rt, --random-tracks  add random tracks to the playlist
-    -10, --ten            play/add 10 random tunes
-    -bt, --by-toplevel    ask which toplevel dir to use (a short code CAN follow)
-    -ra, --random-album   play/add random album
-    -c,  --count          how many tracks to add (default: 10)
-    -ta, --this-album     play/add the album from which the current song is
-    -a,  --append         add tunage, peserving the current playlist
-         --mpc            full path to mpc executable
-    -d,  --debug          echo debugging information
-    -q,  --quiet          sssshhh
-    -?,  --help           this.
+    DJ Thread's MPC Tool, v0.6
+
+    Subjects (You need one of these):
+     -rt, --random-tracks  Use random tracks 
+     -ra, --random-albums  Use random albums
+     -sa, --search-artist  Use tracks with artist names containing the parameter
+     -sb, --search-album   Use tracks with album names containing the parameter
+     -st, --search-title   Use tracks with titles containing the parameter
+     -ta, --this-album     Use the currently playing album
+     -la, --latest         Use latest albums
+
+    Action Overrides (Default is to replace MPD playlist and hit play):
+     -l,  --list           List only mode
+     -s,  --simple         Simple list only mode
+     -b,  --deadbeef       Add to deadbeef
+     -x,  --execute        Execute the argument for each result. X is replaced with
+                           the absolute location. eg. -x 'cp -av X /mnt/hdd'
+     -w,  --raw            The rest of the command line will go straight to mpc
+
+    Modifiers:
+     -bt, --by-toplevel    Ask which toplevel dir to use (a short code CAN follow)
+     -n,  --num            Number of tracks to add (default depends on action)
+     -c,  --choose         Select one or more from the results (default: on)
+     -g,  --go             GO, use all results! (Disable choose mode)
+     -a,  --append         Add tunage, preserving the current playlist
+          --mpc            Full path to mpc executable
+     -h,  --host           set the target host (default: localhost)
+     -p,  --port           set the target port (default: 6600)
+     -r,  --refresh        Refresh MPD's latestRoot first.
+     -f,  --full-paths     Show system-absolute pathnames in output
+     -q,  --quiet          Less output
+     -o,  --mode           Specify the key(s) of the 'modes' array in the config
+                           file to overwrite default params with. eg. -o mode1,mode2
+     -al, --aliases        Nifty aliases. Recommended: mpct.php -al >> ~/.bashrc
+     -?,  --help           this.
+                    (The leading hyphen is optional for short flags.)
 
 
 Web Interface!
