@@ -97,7 +97,7 @@ class Mui
         case 'randomTracks':
             $params = '--random-tracks'; break;
         case 'randomAlbums':
-            $params = '--random-album'; break;
+            $params = '--random-albums'; break;
         case 'thisAlbum':
             $params = '--this-album'; break;
         case 'prev':
@@ -121,7 +121,7 @@ class Mui
             ) {
                 $count = $this->m['count'];
             }
-            $params .= " -c $count";
+            $params .= " -n $count";
 
             if (isset($this->m['BT']) && $this->m['BT'] != '00' && preg_match('/^[a-z0-9]{2}$/', $this->m['BT'])) {
                 $params .= ' -bt ' . $this->m['BT'];
@@ -178,7 +178,7 @@ class Mui
         $ret = '';
         $lines = array_merge(
             array('00 All Genres'),
-            split("\n", $this->mpct('--get-toplevels'))
+            explode("\n", $this->mpct('--get-toplevels'))
         );
         foreach ($lines as $line) {
             if (!preg_match('/^([a-z0-9]{2}) (.+)$/', $line, $matches)) {
@@ -201,7 +201,7 @@ class Mui
     {
         $ret = '';
         $i   = 1;
-        foreach (split("\n", $this->mpct('--raw playlist')) as $line) {
+        foreach (explode("\n", $this->mpct('--raw playlist')) as $line) {
             $ret .= '<li><a class="pli" href="?m[action]=pl&m[i]=' . $i . '">'
                   . htmlspecialchars($line) . "</a></li>\n";
             $i++;
@@ -235,7 +235,7 @@ class Mui
             $hostparam = "-h {$this->m['host']}";
         }
 
-        $cmd = "{$this->mpct} $hostparam $params";
+        $cmd = "{$this->mpct} $hostparam -o webui $params";
         $out = trim(`$cmd`);
 
         return $fancy ? array($cmd, $out) : $out;

@@ -149,7 +149,7 @@ class MPCWorker
 
         // Build regex to look for music file extensions
         self::$params['extRegex'] = '/(\.'
-            . implode('|\.', split(',', self::$params['extensions']))
+            . implode('|\.', explode(',', self::$params['extensions']))
             . ')$/i';
 
         if (!self::$params['num']) {
@@ -218,7 +218,7 @@ class MPCWorker
         if ($params['alfredMode']) {
             foreach ($argv as $av) {
                 if ($av == '--alfred') continue;
-                foreach (split(' ', $av) as $c) {
+                foreach (explode(' ', $av) as $c) {
                     $myargs[] = $c;
                 }
             }
@@ -322,6 +322,9 @@ class MPCWorker
             case '--quiet': case '-q': case 'q':
                 $params['quiet'] = true;
                 break;
+            case '--no-colors': case '-nc': case 'nc':
+                $params['colors'] = false;
+                break;
             case '--mode': case '-o': case 'o':
                 if (!$arg = array_shift($myargs)) {
                     self::out('Mode parameter was missing.', array('fatal' => true));
@@ -352,7 +355,12 @@ class MPCWorker
             $final = array_merge($final, $final['modes']['alfred']);
         }
         if (array_key_exists('mode', $params)) {
-            foreach (split(',', $params['mode']) as $mode) {
+            $final['modes']['webui'] = array_merge(array(
+                'choose' => false,
+                'colors' => false,
+                'quiet'  => true,
+            ), isset($final['modes']['webui']) ? $final['modes']['webui'] : array());
+            foreach (explode(',', $params['mode']) as $mode) {
                 if (array_key_exists('modes', $final)
                   && array_key_exists($mode, $final['modes'])
                 ) {
@@ -374,7 +382,10 @@ class MPCWorker
             $w->$func();
         } while (self::$more);
 
-        $w->act();
+        $actable = array('randomTracks', 'randomAlbums', 'search', 'playThisAlbum', 'latest');
+        if (in_array($func, $actable)) {
+            $w->act();
+        }
     }
 
     /**
