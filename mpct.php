@@ -21,7 +21,7 @@
  * @website http://www.threadbox.net/
  */
 
-MPCWorker::runFromCLIArguments($argv);
+MPCWorker::newFromCLIArguments($argv)->run();
 
 class MPCWorker
 {
@@ -34,6 +34,9 @@ class MPCWorker
      */
     protected static $paramDefaults = array(
         'func'       => null,   // Actual function to call. It will gather the target(s)
+                                //   can be: latest, search, randomTracks, randomAlbums
+                                //   or playThisAlbum.
+                                //   Also valid but less useful are: raw, aliases
         'action'     => 'mpc',  // 'mpc' to add to mpd, 'deadbeef' to send it there,
                                 //   exe to execute cmds, or 'list' to simply list the
                                 //   hits
@@ -69,11 +72,11 @@ class MPCWorker
         'defNumAlbs' => 10,    // default num for --random-albums
         'defNumLa'   => 10,    // default num for --latest
         'alfredMode' => false, // do certain things for an alfred plugin
+        'btRandom'   => null,  // "latest": using toplevel picking? false = all music
 
         // internal only
         'mpcCmd'     => null,  // full mpc cmd prefix: binary, host, port
         'extRegex'   => null,  // regex to recognize music file extensions
-        'btRandom'   => null,  // "latest": using toplevel picking? false = all music
     );
 
     /**
@@ -81,21 +84,21 @@ class MPCWorker
      *
      * @var array
      */
-    protected static $params = array();
+    protected $params = array();
 
     /**
      * The actual subject items we want to operate on
      *
      * @var array
      */
-    protected static $subject = array();
+    protected $subject = array();
 
     /**
      * Will be true when the user uses 'm' at the selection prompt.
      *
      * @var boolean
      */
-    protected static $more = false;
+    protected $more = false;
 
     /**
      * Top-level directory map (short code => full path)
@@ -110,103 +113,53 @@ class MPCWorker
      *
      * @var array
      */
-    protected static $toplevelMap = array();
+    protected $toplevelMap = array();
 
     /**
      * Just the values from $toplevelMap
      *
      * @var array
      */
-    protected static $toplevelDirs = array();
+    protected $toplevelDirs = array();
 
     /**
      * Resulting array of "mpc ls /" just so we don't have to keep asking for it.
      *
      * @var array
      */
-    protected static $rootCache = array();
+    protected $rootCache = array();
 
     /**
      * Array of albums, loaded from the cache at ~/.mpct/albumCache
      *
      * @var array
      */
-    protected static $albumCache = array();
+    protected $albumCache = array();
 
     /**
      * Protected contructor. Invoke this object with runFromCLIArguments()
      *
-     * @param array $params
-     */
-    protected function __construct(array $params)
-    {
-        self::$params = $params;
-
-        self::$params['mpcCmd'] =
-              (self::$params['mpc']  ? self::$params['mpc'] : 'mpc')
-            . (self::$params['host'] ? ' -h ' . self::$params['host'] : '')
-            . (self::$params['port'] ? ' -p ' . self::$params['port'] : '');
-
-        // Build regex to look for music file extensions
-        self::$params['extRegex'] = '/(\.'
-            . implode('|\.', explode(',', self::$params['extensions']))
-            . ')$/i';
-
-        if (!self::$params['num']) {
-            switch (self::$params['func']) {
-            case 'randomTracks':
-                self::$params['num'] = self::$params['defNumTrks'];
-                break;
-            case 'randomAlbums':
-                self::$params['num'] = self::$params['defNumAlbs'];
-                break;
-            case 'latest':
-                self::$params['num'] = self::$params['defNumLa'];
-                break;
-            default:
-                self::$params['num'] = 1;
-            }
-        }
-
-        if (self::$params['debug']) {
-            print_r(self::$params);
-        }
-
-        // For refresh flag. Exact action depends on the func.
-        if (self::$params['refresh']) {
-            $this->refreshMpd();
-        }
-    }
-
-    /**
-     * Do yo shit (from the command line arguments)
-     *
      * @param array $argv
-     * @param array $toplevelMap
-     * @return null
      */
-    public static function runFromCLIArguments($argv)
+    public function __construct(array $argv)
     {
         $cfile = $_SERVER['HOME'] . '/.mpct.conf.php';
         if (file_exists($cfile)) {
             include $cfile;
         }
 
-        self::$toplevelMap  = isset($map) && is_array($map) ? $map : array();
-        self::$toplevelDirs = array_values(self::$toplevelMap);
-        $params['btRandom'] = (bool)self::$toplevelMap;
+        $this->toplevelMap  = isset($map) && is_array($map) ? $map : array();
+        $this->toplevelDirs = array_values($this->toplevelMap);
 
-        $myargs = array();
-        $params = array(
-            'btRandom'   => (bool)self::$toplevelMap,
-            'alfredMode' => null,
-        );
+        $myargs = array();   // args i'll actually parse. subject to alfredization
+        $params = array();   // params built from command-line arguments
 
         array_shift($argv);  // take off the script name. useless.
 
         // I don't like this code much at all. It splits up a single arg into 
         // multiple ones so my alfred extension works. (Alfred sends all 
         // parameters, including spaces, as a single argument.)
+        $params['alfredMode'] = false;
         foreach ($argv as $av) {
             if ($av == '--alfred') {
                 $params['alfredMode'] = true;
@@ -223,6 +176,92 @@ class MPCWorker
                 }
             }
         } else $myargs = $argv;
+
+        $params = array_merge($params, $this->parseArguments($myargs));
+
+        // building the final parameter array ...
+        $final = array_merge(self::$paramDefaults,
+            isset($p) && is_array($p) ? $p : array());
+
+        // add on the mode settings
+        if ($params['alfredMode'] && array_key_exists('alfred', $final['modes'])) {
+            $final = array_merge($final, $final['modes']['alfred']);
+        }
+        if (array_key_exists('mode', $params)) {
+            $final['modes']['webui'] = array_merge(array(
+                'choose' => false,
+                'colors' => false,
+                'quiet'  => true,
+            ), isset($final['modes']['webui']) ? $final['modes']['webui'] : array());
+            foreach (explode(',', $params['mode']) as $mode) {
+                if (array_key_exists('modes', $final)
+                  && array_key_exists($mode, $final['modes'])
+                ) {
+                    $final = array_merge($final, $final['modes'][$mode]);
+                } else {
+                    $this->out("Couldn't find mode: $mode", array('fatal' => true));
+                }
+            }
+        }
+
+        // set btRandom if nobody else did
+        $params['btRandom'] = isset($params['btRandom']) ? $params['btRandom'] : (bool)$this->toplevelMap;
+
+        // command-line params last !
+        $this->params = array_merge($final, $params);
+
+
+        $this->params['mpcCmd'] =
+              ($this->params['mpc']  ? $this->params['mpc'] : 'mpc')
+            . ($this->params['host'] ? ' -h ' . $this->params['host'] : '')
+            . ($this->params['port'] ? ' -p ' . $this->params['port'] : '');
+
+        // Build regex to look for music file extensions
+        $this->params['extRegex'] = '/(\.'
+            . implode('|\.', explode(',', $this->params['extensions']))
+            . ')$/i';
+
+        if (!$this->params['num']) {
+            switch ($this->params['func']) {
+            case 'randomTracks':
+                $this->params['num'] = $this->params['defNumTrks'];
+                break;
+            case 'randomAlbums':
+                $this->params['num'] = $this->params['defNumAlbs'];
+                break;
+            case 'latest':
+                $this->params['num'] = $this->params['defNumLa'];
+                break;
+            default:
+                $this->params['num'] = 1;
+            }
+        }
+
+        if ($this->params['debug']) {
+            print_r($this->params);
+        }
+    }
+
+    /**
+     * Silly factory method so I can run my whole program with one line ;)
+     *
+     * @param array $argv
+     * @return MPCWorker
+     */
+    public static function newFromCLIArguments($argv)
+    {
+        return new self($argv);
+    }
+
+    /**
+     * Actually iterate over the arguments and set up the corresponding params
+     *
+     * @param array $myargs
+     * @return array
+     */
+    protected function parseArguments($myargs)
+    {
+        $params = array();
 
         while ($myargs) {
             switch ($arg = array_shift($myargs)) {
@@ -297,7 +336,7 @@ class MPCWorker
                 if (!($arg = array_shift($myargs))
                   || !ctype_digit($arg)
                 ) {
-                    self::out('--num must be followed by a number',
+                    $this->out('--num must be followed by a number',
                         array('fatal' => true));
                 }
                 $params['num'] = $arg;
@@ -305,13 +344,13 @@ class MPCWorker
             case '--by-toplevel': case '-bt': case 'bt':
                 $params['bt'] = null;
                 if (($arg = array_shift($myargs))
-                  && array_key_exists($arg, self::$toplevelMap)
+                  && array_key_exists($arg, $this->toplevelMap)
                 ) {
                     $params['bt'] = $arg;
                 } else if ($arg) {
                     array_unshift($myargs, $arg); // put it back
                 }
-                $params['bt'] = $params['bt'] ?: self::getToplevel();
+                $params['bt'] = $params['bt'] ?: $this->getToplevel();
                 break;
             case '--full-paths': case '-f': case 'f':
                 $params['fullPaths'] = true;
@@ -327,7 +366,7 @@ class MPCWorker
                 break;
             case '--mode': case '-o': case 'o':
                 if (!$arg = array_shift($myargs)) {
-                    self::out('Mode parameter was missing.', array('fatal' => true));
+                    $this->out('Mode parameter was missing.', array('fatal' => true));
                 }
                 $params['mode'] = $arg;
                 break;
@@ -336,55 +375,41 @@ class MPCWorker
                 break;
             case '--get-toplevels':
                 // imma keep dis secret. only really needed for the web interface.
-                foreach (self::$toplevelMap as $k => $v) {
+                foreach ($this->toplevelMap as $k => $v) {
                     echo "$k $v\n";
                 }
                 die();
                 break;
             default:
-                self::out("What?: $arg", array('fatal' => true));
+                $this->out("What?: $arg", array('fatal' => true));
             }
         }
 
-        // building the final parameter array ...
-        $final = array_merge(self::$paramDefaults,
-            isset($p) && is_array($p) ? $p : array());
+        return $params;
+    }
 
-        // add on the mode settings
-        if ($params['alfredMode'] && array_key_exists('alfred', $final['modes'])) {
-            $final = array_merge($final, $final['modes']['alfred']);
-        }
-        if (array_key_exists('mode', $params)) {
-            $final['modes']['webui'] = array_merge(array(
-                'choose' => false,
-                'colors' => false,
-                'quiet'  => true,
-            ), isset($final['modes']['webui']) ? $final['modes']['webui'] : array());
-            foreach (explode(',', $params['mode']) as $mode) {
-                if (array_key_exists('modes', $final)
-                  && array_key_exists($mode, $final['modes'])
-                ) {
-                    $final = array_merge($final, $final['modes'][$mode]);
-                } else {
-                    self::out("Couldn't find mode: $mode", array('fatal' => true));
-                }
-            }
+    /**
+     * Actually execute the configured action
+     *
+     * @return null
+     */
+    public function run()
+    {
+        // For refresh flag.
+        if ($this->params['refresh']) {
+            $this->refreshMpd();
         }
 
-        // command-line params last !
-        $final = array_merge($final, $params);
-
-        $w    = new self($final);
-        $func = self::$params['func'] ?: 'help';
+        $func = $this->params['func'] ?: 'help';
 
         do {
-            self::$more = false;
-            $w->$func();
-        } while (self::$more);
+            $this->more = false;
+            $this->$func();
+        } while ($this->more);
 
         $actable = array('randomTracks', 'randomAlbums', 'search', 'playThisAlbum', 'latest');
         if (in_array($func, $actable)) {
-            $w->act();
+            $this->act();
         }
     }
 
@@ -470,7 +495,7 @@ alias mr='$self --raw'
     public function randomTracks()
     {
         $tracks = array();
-        for ($i=0; $i<self::$params['num']; $i++) {
+        for ($i=0; $i<$this->p('num'); $i++) {
             $tracks[] = $this->getRandomTrack();
         }
 
@@ -484,10 +509,10 @@ alias mr='$self --raw'
     {
         $albums = array();
 
-        for ($i=0; $i<self::$params['num']; $i++) {
+        for ($i=0; $i<$this->p('num'); $i++) {
             $track = $this->getRandomTrack();
             if (!preg_match('/^(.+)\//', $track, $matches)) {
-                self::out("Couldn't strip dir off of file: $track\n");
+                $this->out("Couldn't strip dir off of file: $track\n");
                 $i--; continue;
             }
 
@@ -509,7 +534,7 @@ alias mr='$self --raw'
         if (!$file || !isset($file[0])
           || !preg_match('/^(.+)\//', $file[0], $matches)
         ) {
-            self::out("The current track doesn't belong to an album!",
+            $this->out("The current track doesn't belong to an album!",
                 array('fatal' => true));
         }
 
@@ -523,7 +548,7 @@ alias mr='$self --raw'
      */
     public function raw()
     {
-        $this->mpc(self::$params['rawCmd'], false, true);
+        $this->mpc($this->p('rawCmd'), false, true);
     }
 
     /**
@@ -536,11 +561,11 @@ alias mr='$self --raw'
      */
     public function getRandomTrack()
     {
-        $albums = self::$albumCache ?: (self::$albumCache = $this->mpc('list album'));
+        $albums = $this->albumCache ?: ($this->albumCache = $this->mpc('list album'));
         $album  = null;
 
         if (!$albums) {
-            self::out('Failed to find any albums via "mpc list album" ?',
+            $this->out('Failed to find any albums via "mpc list album" ?',
                 array('fatal' => true));
         }
 
@@ -549,7 +574,7 @@ alias mr='$self --raw'
                 $album = $albums[rand(0, count($albums) - 1)];
             } while (!$album);
 
-            $files = $this->mpc('find album "' . self::quotefix($album) . '"');
+            $files = $this->mpc('find album "' . $this->quotefix($album) . '"');
             $file  = null;
         } while (!$files);
 
@@ -563,11 +588,15 @@ alias mr='$self --raw'
     /**
      * Returns the full path to a random track
      *
-     * This "old" version works by recursing the tree. It's not random enough.
+     * This isn't as random as getRandomTrack() because of how it recurses dirs 
+     * instead of selecting randomly from all albums. For instance, if you had 
+     * one dir with one album in it and another dir with 50 albums in it, you'd 
+     * be selecting the dir with one album in it half the time. But, it is the 
+     * best I can come up with for selecting by toplevel.
      *
      * @return string
      */
-    public function getRandomTrackOld()
+    public function getRandomTrackByToplevel()
     {
         $dirs = null;
         $cur  = null;
@@ -577,14 +606,14 @@ alias mr='$self --raw'
                 $cur = $dirs[rand(0, count($dirs) - 1)];
             } else {
                 // if we have cur, then we this isn't our first iteration.
-                if ($cur) self::out("Hit a dead end: $cur", array('debug' => true));
+                if ($cur) $this->out("Hit a dead end: $cur", array('debug' => true));
 
                 if ($dirs = $this->lsStartDir()) {
                     $cur = $dirs[rand(0, count($dirs) - 1)];
                 } else continue;
             }
 
-            if (self::hasInterestingExtension($cur)) {
+            if ($this->hasInterestingExtension($cur)) {
                 return $cur;
             }
 
@@ -601,18 +630,18 @@ alias mr='$self --raw'
     {
         $dirs = array();
 
-        if (self::$params['btRandom']) {
+        if ($this->p('btRandom')) {
 
-            $tl = self::$params['bt']
-                ? self::getToplevel(self::$params['bt'])
-                : self::$toplevelDirs[rand(0, count(self::$toplevelDirs) - 1)];
+            $tl = $this->p('bt')
+                ? $this->getToplevel($this->p('bt'))
+                : $this->toplevelDirs[rand(0, count($this->toplevelDirs) - 1)];
 
             if (!$dirs = $this->lsDir($tl, true)) {
                 // ok, some toplevel is empty or something.
                 // no more by-toplevel randomness anymore.
-                self::out("Toplevel '$tl' is empty or missing. Toplevel dirs "
+                $this->out("Toplevel '$tl' is empty or missing. Toplevel dirs "
                     . 'are disabled.', array('debug' => true));
-                self::$params['btRandom'] = false;
+                $this->pSet('btRandom', false);
             }
         }
 
@@ -632,13 +661,13 @@ alias mr='$self --raw'
     protected function lsDir($dir, $failok = false)
     {
         if ($dir == '/') {
-            if (!self::$rootCache) {
-                self::$rootCache = $this->mpc('ls /');
+            if (!$this->rootCache) {
+                $this->rootCache = $this->mpc('ls /');
             }
-            return self::$rootCache;
+            return $this->rootCache;
         }
 
-        return $this->mpc('ls "' . self::quotefix($dir) . '"',
+        return $this->mpc('ls "' . $this->quotefix($dir) . '"',
             false, false, array('failok' => $failok));
     }
 
@@ -646,7 +675,7 @@ alias mr='$self --raw'
      * @param string $str
      * @return string
      */
-    protected static function quotefix($str)
+    protected function quotefix($str)
     {
         return str_replace(
             array('"', '$'),
@@ -663,9 +692,9 @@ alias mr='$self --raw'
     {
         $mpc = $this->mpc();
         if (isset($mpc[0]) && isset($mpc[1])) {
-            self::out("{$mpc[0]}\n{$mpc[1]}");
+            $this->out("{$mpc[0]}\n{$mpc[1]}");
         } else {
-            self::out(implode("\n", $mpc));
+            $this->out(implode("\n", $mpc));
         }
     }
 
@@ -678,13 +707,13 @@ alias mr='$self --raw'
      */
     protected function add(array $items, array $o = array())
     {
-        if (self::$params['choose']) {
+        if ($this->p('choose')) {
             foreach ($items as &$i) {
                 if (is_array($i)) {
                     $i['disp'] = isset($i['disp']) ? $i['disp']
-                               : self::colorify($i['name']);
+                               : $this->colorify($i['name']);
                 } else {
-                    $i = array('name' => $i, 'disp' => self::colorify($i));
+                    $i = array('name' => $i, 'disp' => $this->colorify($i));
                 }
             }
             $items = $this->getSelectionFrom($items, true);
@@ -697,7 +726,7 @@ alias mr='$self --raw'
             }
         }
 
-        self::$subject = array_merge(self::$subject, $items);
+        $this->subject = array_merge($this->subject, $items);
     }
 
     /**
@@ -709,45 +738,45 @@ alias mr='$self --raw'
      */
     protected function act()
     {
-        if (self::$params['debug']) print_r(self::$subject);
+        if ($this->p('debug')) print_r($this->subject);
 
-        if (!self::$subject) {
-            self::out('No items found.', array('fatal' => true));
+        if (!$this->subject) {
+            $this->out('No items found.', array('fatal' => true));
         }
 
-        $c = count(self::$subject);
+        $c = count($this->subject);
         for ($i=0; $i<$c; $i++) {
 
-            $x = self::$subject[$i];
+            $x = $this->subject[$i];
 
-            if (self::$params['action'] == 'exe' && self::$params['exe']) {
+            if ($this->p('action') == 'exe' && $this->p('exe')) {
                 $cmd = str_replace('X',
-                    '"' . self::quotefix(self::$params['mpdRoot'] . '/'
-                    . $x) . '"', self::$params['exe']);
+                    '"' . $this->quotefix($this->p('mpdRoot') . '/'
+                    . $x) . '"', $this->p('exe'));
                 $this->cmd($cmd, true, true);
-            } else if (self::$params['action'] == 'mpc') {
-                $echo = !self::$params['quiet'];
-                if ($i == 0 && !self::$params['append']) $this->mpc('clear', $echo);
-                $this->mpc('add "' . self::quotefix($x) . '"', $echo);
-                if ($i == 0 && !self::$params['append']) $this->mpc('play', $echo);
-            } else if (self::$params['action'] == 'deadbeef') {
-                $this->cmd('deadbeef "' . self::quotefix($x) . '"',
-                    !self::$params['quiet']);
-            } else if (self::$params['action'] == 'list') {
+            } else if ($this->p('action') == 'mpc') {
+                $echo = !$this->p('quiet');
+                if ($i == 0 && !$this->p('append')) $this->mpc('clear', $echo);
+                $this->mpc('add "' . $this->quotefix($x) . '"', $echo);
+                if ($i == 0 && !$this->p('append')) $this->mpc('play', $echo);
+            } else if ($this->p('action') == 'deadbeef') {
+                $this->cmd('deadbeef "' . $this->quotefix($x) . '"',
+                    !$this->p('quiet'));
+            } else if ($this->p('action') == 'list') {
                 // make a colorized display version if option is enabled
-                if (self::$params['simpleOut']) {
+                if ($this->p('simpleOut')) {
                     echo $x . "\n";
                 } else {
-                    echo  self::getnum($i+1, $c)
-                        . self::colorify($x)
+                    echo  $this->getnum($i+1, $c)
+                        . $this->colorify($x)
                         . "\n";
                 }
             } else {
-                self::out("Action is what ({$this->action}) ?", array('fatal' => true));
+                $this->out("Action is what ({$this->action}) ?", array('fatal' => true));
             }
         }
 
-        if (self::$params['action'] == 'mpc' && self::$params['quiet']) {
+        if ($this->p('action') == 'mpc' && $this->p('quiet')) {
             $this->echoStatus();
         }
     }
@@ -759,9 +788,8 @@ alias mr='$self --raw'
      */
     protected function refreshMpd()
     {
-        $it = str_replace(self::$params['mpdRoot'] . '/', '',
-            self::$params['latestRoot']);
-        $g = $this->mpc('update "' . self::quotefix($it) . '"', true);
+        $it = str_replace($this->p('mpdRoot') . '/', '', $this->p('latestRoot'));
+        $g = $this->mpc('update "' . $this->quotefix($it) . '"', true);
         echo "Waiting for DB to refresh..";
         do {
             echo '.';
@@ -793,18 +821,18 @@ alias mr='$self --raw'
         ), $o);
 
         $retval = null;
-        $cmd    = self::$params['mpcCmd'] .  ' ' . $cmd;
+        $cmd    = $this->p('mpcCmd') .  ' ' . $cmd;
         $out    = $this->cmd($cmd, $echoCmd, $echoResult, $retval);
 
         if (isset($out[0]) && $out[0] == 'error: Connection refused') {
-            self::out($out[0], array('fatal' => true));
+            $this->out($out[0], array('fatal' => true));
         }
 
         $out = array_filter($out,
             function ($i) { return substr($i, 0, 7) != 'error: '; });
 
         if ($retval != 0 && !$o['failok']) {
-            self::out('mpc fail.', array('fatal' => true));
+            $this->out('mpc fail.', array('fatal' => true));
         }
 
         return $out;
@@ -822,14 +850,14 @@ alias mr='$self --raw'
     {
         $list = array();
 
-        if ($echoCmd || self::$params['debug']) {
-            self::out(' -> ' . $cmd);
+        if ($echoCmd || $this->p('debug')) {
+            $this->out(' -> ' . $cmd);
         }
 
         exec($cmd . ' 2>&1', $list, $retval);
 
-        if ($list && ($echoResult || self::$params['debug'])) {
-            self::out(implode("\n", $list));
+        if ($list && ($echoResult || $this->p('debug'))) {
+            $this->out(implode("\n", $list));
         }
 
         return $list;
@@ -853,9 +881,9 @@ alias mr='$self --raw'
 
         if ($o['fatal'] || $o['warn']) $o['color'] = 'red';
 
-        if ($o['debug'] && !self::$params['debug']) return;
+        if ($o['debug'] && !$this->p('debug')) return;
 
-        echo $o['color'] ? self::col($msg, $o['color']) : $msg;
+        echo $o['color'] ? $this->col($msg, $o['color']) : $msg;
         echo "\n";
 
         if ($o['fatal']) die();
@@ -867,9 +895,9 @@ alias mr='$self --raw'
      * @param string $txt
      * @param string $color
      */
-    protected static function col($txt, $color)
+    protected function col($txt, $color)
     {
-        if (!self::$params['colors']) {
+        if (!$this->p('colors')) {
             return $txt;
         }
 
@@ -904,9 +932,9 @@ alias mr='$self --raw'
      * @param array $o
      * @return string|array
      */
-    protected static function colorify($in, array $o = array())
+    protected function colorify($in, array $o = array())
     {
-        if (!self::$params['colors']) {
+        if (!$this->p('colors')) {
             return $in;
         }
 
@@ -921,7 +949,7 @@ alias mr='$self --raw'
                 $path = $matches[1];
                 $c    = substr_count($path, '/') % 2 ? 'cyan' : 'normal';
                 while (($pos = strpos($path, '/')) !== false && $p = substr($path, 0, $pos + 1)) {
-                    $p1   .= self::col($p, $c);
+                    $p1   .= $this->col($p, $c);
                     $c     = $c == 'cyan' ? 'normal' : 'cyan';
                     $path  = substr($path, strlen($p));
                 }
@@ -929,13 +957,13 @@ alias mr='$self --raw'
             }
             $regex = '/^(.+?)((?:-| - |\.)?(?:[\(\[].+|flac|ogg|mp3|v0|\d+cd|web|20\d\d+|19\d\d).*)/i';
             if (preg_match($regex, $p2, $matches)) {
-                $p2 = $matches[1] . self::col($matches[2], 'brown');
+                $p2 = $matches[1] . $this->col($matches[2], 'brown');
             }
-            // $disp = str_replace(array('EP'), array(self::col('EP', 'red')), $p1 . $p2);
+            // $disp = str_replace(array('EP'), array($this->col('EP', 'red')), $p1 . $p2);
             $e = '';
 
             if (isset($o['mtime'])) {
-                $e .= self::col(date('m-d', $o['mtime']) . '. ', 'cyan');
+                $e .= $this->col(date('m-d', $o['mtime']) . '. ', 'cyan');
             }
 
             $e .= $p1 . $p2;
@@ -953,7 +981,7 @@ alias mr='$self --raw'
     protected function getnum($num, $total)
     {
         $nums = strlen((string)$total) + 1;
-        return self::col(sprintf("%{$nums}d. ", $num), 'green');
+        return $this->col(sprintf("%{$nums}d. ", $num), 'green');
     }
 
     /**
@@ -963,26 +991,26 @@ alias mr='$self --raw'
      * @param string $name
      * @return boolean
      */
-    protected static function hasInterestingExtension($name)
+    protected function hasInterestingExtension($name)
     {
-        return preg_match(self::$params['extRegex'], $name);
+        return preg_match($this->p('extRegex'), $name);
     }
 
     /**
      * @param string $short
      * @return string (the full toplevel dir name)
      */
-    protected static function getToplevel($short = null)
+    protected function getToplevel($short = null)
     {
         if ($short && $short !== true) {
-            if (array_key_exists($short, self::$toplevelMap)) {
-                return self::$toplevelMap[$short];
+            if (array_key_exists($short, $this->toplevelMap)) {
+                return $this->toplevelMap[$short];
             } else {
                 return false;
             }
         }
 
-        return self::getSelectionFrom(self::$toplevelMap, false, true);
+        return $this->getSelectionFrom($this->toplevelMap, false, true);
     }
 
     /**
@@ -993,7 +1021,7 @@ alias mr='$self --raw'
      * @param boolean $returnKeys
      * @return array|string
      */
-    protected static function getSelectionFrom(array $options,
+    protected function getSelectionFrom(array $options,
         $multi = false, $returnKeys = false)
     {
         // is the array associative?
@@ -1004,9 +1032,9 @@ alias mr='$self --raw'
         foreach ($options as $k => $v) {
             if (is_array($v)) $v = isset($v['disp']) ? $v['disp'] : $v['name'];
             if ($isAssoc) {
-                echo self::col("    $k.", 'green') . " $v\n";
+                echo $this->col("    $k.", 'green') . " $v\n";
             } else {
-                echo self::getnum($k+1, $c) . "$v\n";
+                echo $this->getnum($k+1, $c) . "$v\n";
             }
         }
         echo "\n";
@@ -1014,31 +1042,31 @@ alias mr='$self --raw'
         $stdin = fopen('php://stdin', 'r');
         $ret   = array();
         do {
-            echo  self::col('>', 'gray')
-                . self::col('>', 'green')
-                . self::col('> ', 'light green');
+            echo  $this->col('>', 'gray')
+                . $this->col('>', 'green')
+                . $this->col('> ', 'light green');
             $choice = trim(fgets($stdin));
             $retry  = false;
             if (!$choice) {
-                if (self::$subject) {
+                if ($this->subject) {
                     break;
                 } else {
-                    self::out('Fine.'); die();
+                    $this->out('Fine.'); die();
                 }
             } else if ($multi) {
                 $ret = array();
                 foreach (preg_split('/[, ]+/', $choice) as $bit) {
                     if ($bit == 'a') {               // a is an append shortcut
-                        self::$params['append'] = true;
+                        $this->pSet('append', true);
                     } else if ($bit == 'm') {        // user wants another list
-                        self::$more = true;
+                        $this->more = true;
                     } else if ($isAssoc) {           // associative arrays
                         if (!array_key_exists($bit, $options)) {
-                            self::out("Invalid input: $bit", array('warn' => true));
+                            $this->out("Invalid input: $bit", array('warn' => true));
                             $retry = true;
                         } else $ret[] = $returnKeys ? $bit : $options[$bit];
                     } else if (in_array($bit, array('?', 'h'))) {
-                        echo "\nSeparate parameters with spaces or commas.\n"
+                        echo "\nSeparate parameters with spaces or commas. Give no input to exit.\n"
                             . "\t1   - Select option #1\n"
                             . "\t1-5 - Select options #1 through #5\n"
                             . "\tA   - Select all listed options\n"
@@ -1049,7 +1077,7 @@ alias mr='$self --raw'
                     } else if (ctype_digit($bit)) {  // numeric-indexed array
                         $b = $bit - 1;
                         if (!array_key_exists($b, $options)) {
-                            self::out("Invalid input: $bit", array('warn' => true));
+                            $this->out("Invalid input: $bit", array('warn' => true));
                             $retry = true;
                         } else $ret[] = $returnKeys ? $b : $options[$b];
                     } else if ((preg_match('/^(\d+)-(\d+)$/', $bit, $m)  // ranges
@@ -1062,14 +1090,14 @@ alias mr='$self --raw'
                             $ret[] = $returnKeys ? ($i-1) : $options[$i-1];
                         }
                     } else {
-                        self::out("Invalid input: $bit", array('warn' => true));
+                        $this->out("Invalid input: $bit", array('warn' => true));
                         $retry = true;
                     }
                 }
             } else {
                 $c = $isAssoc ? $choice : $choice-1;
                 if (!array_key_exists($c, $options)) {
-                    self::out("Invalid input: $choice", array('warn' => true));
+                    $this->out("Invalid input: $choice", array('warn' => true));
                     $retry = true;
                 } else $ret = $returnKeys ? $c : $options[$c];
             }
@@ -1086,25 +1114,25 @@ alias mr='$self --raw'
      */
     public function latest()
     {
-        $dirs = $this->recurse(self::$params['latestRoot']);
+        $dirs = $this->recurse($this->p('latestRoot'));
 
-        if (!$dirs) self::out("Couldn't find anything in latestRoot: "
-            . self::$params['latestRoot'], array('fatal' => true));
+        if (!$dirs) $this->out("Couldn't find anything in latestRoot: "
+            . $this->p('latestRoot'), array('fatal' => true));
 
         // Sort them by mod time
         usort($dirs, function($a, $b) {
             return $a['mtime'] < $b['mtime'];
         });
 
-        $n = self::$params['num'] < count($dirs) ? self::$params['num'] : count($dirs);
+        $n = $this->p('num') < count($dirs) ? $this->p('num') : count($dirs);
         $target = array_slice($dirs, 0, $n);
 
         foreach ($target as &$t) {
-            $t['disp'] = str_replace(self::$params['latestRoot'] . '/', '', $t['name']);
-            if (!self::$params['simpleOut']) {
-                $t['disp'] = self::colorify($t['disp'], array('mtime' => $t['mtime']));
+            $t['disp'] = str_replace($this->p('latestRoot') . '/', '', $t['name']);
+            if (!$this->p('simpleOut')) {
+                $t['disp'] = $this->colorify($t['disp'], array('mtime' => $t['mtime']));
             }
-            $t['name'] = str_replace(self::$params['mpdRoot'] . '/', '', $t['name']);
+            $t['name'] = str_replace($this->p('mpdRoot') . '/', '', $t['name']);
         }
 
         $this->add($target);
@@ -1117,17 +1145,16 @@ alias mr='$self --raw'
      */
     public function search()
     {
-        if (!self::$params['search']) {
-            self::out('Please provide a search term.', array('fatal' => true));
+        if (!$this->p('search')) {
+            $this->out('Please provide a search term.', array('fatal' => true));
         }
 
-        if (self::$params['searchType'] == 'title') {
-            $list = $this->mpc('search title "'
-                  . self::quotefix(self::$params['search']) . '"');
+        if ($this->p('searchType') == 'title') {
+            $list = $this->mpc('search title "' . $this->quotefix($this->p('search')) . '"');
         } else {
             $list = array();
-            $all = $this->mpc('search ' . self::$params['searchType']
-                  . ' "' . self::quotefix(self::$params['search']) . '"');
+            $all = $this->mpc('search ' . $this->p('searchType')
+                  . ' "' . $this->quotefix($this->p('search')) . '"');
             foreach ($all as $i) {
                 if (preg_match('/^(.+)\//', $i, $matches)
                   && !in_array($matches[1], $list)
@@ -1137,7 +1164,7 @@ alias mr='$self --raw'
             }
         }
 
-        if (!$list) self::out('No results :(', array('fatal' => true));
+        if (!$list) $this->out('No results :(', array('fatal' => true));
 
         $this->add($list);
     }
@@ -1151,22 +1178,22 @@ alias mr='$self --raw'
      */
     protected function recurse($dir, $d = null)
     {
-        if (is_null($d)) $d = self::$params['deep'];
+        if (is_null($d)) $d = $this->p('deep');
 
         $results = array();  // each is: array('name' => name, 'mtime' => mtime);
         // $glob = glob("$dir/*", GLOB_ONLYDIR);
         $globTarget = "$dir/*";
-        if (self::$params['debug']) self::out("globbing: $globTarget");
+        if ($this->p('debug')) $this->out("globbing: $globTarget");
         $glob = glob($globTarget);
-        if (self::$params['debug']) self::out(print_r($glob,true));
+        if ($this->p('debug')) $this->out(print_r($glob,true));
         if (!$glob) return array();
         foreach ($glob as $t) {
 
             // if it's the top level of the search, make sure we skip any results in 
             // the exclude array.
-            if ($d == self::$params['deep']) {
+            if ($d == $this->p('deep')) {
                 preg_match('/([^\/]+)$/', $t, $matches);
-                if (in_array($matches[1], self::$params['exclude'])) {
+                if (in_array($matches[1], $this->p('exclude'))) {
                     continue;
                 }
             }
@@ -1177,7 +1204,7 @@ alias mr='$self --raw'
                 $results = array_merge($results, $this->recurse($t, $d - 1));
             } else if ($d > 1 && $isfile) {
                 // a file found, but we're not deep enough yet; ignore.
-            } else if ($isfile && !self::hasInterestingExtension($t)) {
+            } else if ($isfile && !$this->hasInterestingExtension($t)) {
                 // a file found, but doesn't have an extension we want
             } else {
                 $s = stat($t);
@@ -1189,5 +1216,29 @@ alias mr='$self --raw'
         }
 
         return $results;
+    }
+
+    /**
+     * Get a parameter
+     *
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    protected function p($key, $default = null)
+    {
+        return array_key_exists($key, $this->params) ? $this->params[$key] : $default;
+    }
+
+    /**
+     * Set a parameter
+     *
+     * @param string $key
+     * @param mixed $val
+     * @return null
+     */
+    protected function pSet($key, $val)
+    {
+        $this->params[$key] = $val;
     }
 }
