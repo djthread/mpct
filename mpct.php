@@ -510,7 +510,9 @@ alias mr='$self --raw'
         $albums = array();
 
         for ($i=0; $i<$this->p('num'); $i++) {
-            $track = $this->getRandomTrack();
+            $track = $this->params['btRandom']
+                ? $this->getRandomTrackByToplevel()
+                : $this->getRandomTrack();
             if (!preg_match('/^(.+)\//', $track, $matches)) {
                 $this->out("Couldn't strip dir off of file: $track\n");
                 $i--; continue;
