@@ -1201,17 +1201,22 @@ alias mr='$self --raw'
             $isfile = is_file($t);
 
             if ($d > 1 && !$isfile) {
+                if ($this->p('debug')) $this->out("recursing $t");
                 $results = array_merge($results, $this->recurse($t, $d - 1));
             } else if ($d > 1 && $isfile) {
                 // a file found, but we're not deep enough yet; ignore.
+                if ($this->p('debug')) $this->out("found file, not deep enough: $t");
             } else if ($isfile && !$this->hasInterestingExtension($t)) {
                 // a file found, but doesn't have an extension we want
+                if ($this->p('debug')) $this->out("found file, uninteresting extension: $t");
             } else {
                 $s = stat($t);
-                $results[] = array(
+                $res = array(
                     'name'  => $t,
                     'mtime' => $s['mtime']
                 );
+                if ($this->p('debug')) $this->out(print_r($res, true));
+                $results[] = $res;
             }
         }
 
