@@ -5,16 +5,6 @@
  *
  * Automates my music selection by adding random music to my playlist.
  *
- * My randomness isn't the most bad ass. Rather than pulling from the collection
- * in a truly random fashion (where every track has an equal chance of being 
- * played) I list the starting directory, choose a dir at random, then a random 
- * item from within that directory, going deeper into the tree until I randomly 
- * select a track. This is not truly the most random, but I don't think I'm too 
- * bothered by it.
- *
- * Before this implementation, I was getting teh full list of albums from mpc 
- * (and caching it) but this approach had its drawbacks.
- *
  * I'd love to hear about any and all comments / improvements!
  *
  * @author thread <thethread@gmail.com>
@@ -25,7 +15,7 @@ MPCWorker::newFromCLIArguments($argv)->run();
 
 class MPCWorker
 {
-    const VERSION = '0.6';
+    const VERSION = '0.7';
 
     /**
      * The parameter defaults, overridden by the config file & command line
@@ -37,9 +27,8 @@ class MPCWorker
                                 //   can be: latest, search, randomTracks, randomAlbums
                                 //   or playThisAlbum.
                                 //   Also valid but less useful are: raw, aliases
-        'action'     => 'mpc',  // 'mpc' to add to mpd, 'deadbeef' to send it there,
-                                //   exe to execute cmds, or 'list' to simply list the
-                                //   hits
+        'action'     => 'mpc',  // 'mpc' to add to mpd, 'exe' to execute cmds, or 'list'
+                                //   to simply list the hits
 
         'host'       => null,   // override the host default/environment
         'port'       => null,   // override the host default/environment
@@ -165,6 +154,7 @@ class MPCWorker
                 $params['alfredMode'] = true;
                 $params['colors']     = false;
                 $params['quiet']      = true;
+                $params['choose']     = false;
                 break;
             }
         }
@@ -435,9 +425,8 @@ Subjects (You need one of these):
  -la, --latest         Use latest albums
 
 Action Overrides (Default is to replace MPD playlist and hit play):
- -l,  --list           List only mode
+ -l,  --list           List only mode (implies --go)
  -s,  --simple         Simple list only mode
- -b,  --deadbeef       Add to deadbeef
  -x,  --execute        Execute the argument for each result. X is replaced with
                        the absolute location. eg. -x 'cp -av X /mnt/hdd'
  -w,  --raw            The rest of the command line will go straight to mpc
@@ -761,9 +750,6 @@ alias mr='$self --raw'
                 if ($i == 0 && !$this->p('append')) $this->mpc('clear', $echo);
                 $this->mpc('add "' . $this->quotefix($x) . '"', $echo);
                 if ($i == 0 && !$this->p('append')) $this->mpc('play', $echo);
-            } else if ($this->p('action') == 'deadbeef') {
-                $this->cmd('deadbeef "' . $this->quotefix($x) . '"',
-                    !$this->p('quiet'));
             } else if ($this->p('action') == 'list') {
                 // make a colorized display version if option is enabled
                 if ($this->p('simpleOut')) {

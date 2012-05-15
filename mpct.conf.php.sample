@@ -3,7 +3,7 @@
  * Copy this file to ~/.mpct.conf.php to override default behavior.
  *
  * The internal parameters that may be overridden are listed near the top of
- * the main script.
+ * the main script and at the bottom of the README.
  *
  * The modes feature allows you to set up an entire set of flags to be
  * referred to easily with the -o flag.

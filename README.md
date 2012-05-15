@@ -3,13 +3,13 @@ DJ Thread's MPC Tool
 
 This is my personal wrapper to mpc, the CLI client for [MPD](http://www.musicpd.org/). It's intended to make adding music to the playlist as easy as possible.
 
-It operates under the idea that a function compiles a list of "results" (aka your list of "subject" items), the --choose (-c) flag, if enabled, lists the results and allows you to cherry-pick from them (otherwise all results are used), and finally the results will have some action executed on them:
+It operates under the idea that a function compiles a list of results (aka your list of "subject" items), the --choose (-c) flag, if enabled, lists the results and allows you to cherry-pick from them (otherwise all results are used), and finally the results will have some action executed on them:
 
     [ Function returns results (eg. latest music, random albums, etc) (you must specify this) ]
         -->  [ Choose menu pares them down (default: on) ]
         -->  [ Action operates on the final list. (default: Replace MPD Playlist and Play) ]
 
-The method of gathering the list of subject items must be defined, but the above reflects the default, otherwise. The chart reflects what would happen if you invoked "mpct.php --latest". The choose menu is used by default (use -g to GO and skip it), and the files will replace the MPD playlist.
+The method of gathering the list of subject items must be defined, but the above reflects the default, otherwise. The diagram reflects what would happen if you invoked "mpct.php --latest". The choose menu is used by default (use -g to GO and skip it), and the files will replace the MPD playlist.
 
 
 Shell Aliases
@@ -34,6 +34,15 @@ Modes are arrays of parameters (see next section) that override default settings
 			'latestRoot' => '/storage/music/Thread/show',
             'deep'       => 0,
             'num'        => 10,
+        ),
+
+Here's one that could add the songs to DeadBeef instead of MPD:
+
+        'beef'   => array(
+            'func'       => 'randomTracks',
+            'num'        => 10,
+            'action'     => 'exe',
+            'exe'        => 'deadbeef X',
         ),
 
 
@@ -65,7 +74,18 @@ At the prompt, enter one or more parameters, separated by spaces, then press ret
  - Simply press return with no input to exit.
 
 
-Toplevel
+By-Toplevel Random
+------------------
+
+In my collection, I like to split the organization essentially into sub-collections with each top-level directory named by genre. It's never perfect, especially as my favorite music spawns multiple genres, but it saves my eyes and file managers from having to process an entire directory loaded with folders. (Of course, searching is a great way to find something in particular.) If you don't divide your collection into directory-based "subcollections" in this way, you can safely ignore this section. If you find it interesting, however, to load random music by these directory-based locations, read on!
+
+To set up this feature, be sure and define the $map array in your config file. There is an example array to get you started, but it's simply an array where the keys (on the left) are short codes and the right are directories relative to the MPD root. (The leading slash should is omitted.)
+
+To activate this feature, simply use the --by-toplevel (-bt) flag in conjunction with a random function: --random-albums (-ra) or --random-tracks (-rt). You then have the option of either using a short code like "-ra -bt db" or leaving it off like "-ra -bt" in which case you'll be given the list of short codes to pick from.
+
+When this flag is used, only music within that directory will be randomly selected.
+
+Even when this flag is *not* used, if you have configured the $map array, the random selection features will only use music from these directories. I did this so I could leave some directories entirely out of my randomness functions. If you don't like this behavior, let me know and I'll think about making this more flexible. :)
 
 
 Remote Use (Somewhat Tricky with --latest)
@@ -75,14 +95,9 @@ You can very easily use mpct to interact with a remote MPD instance since mostly
 
 
 
-
-Be sure and check the top of the script. You'll want to change the $toplevelMap array to work with your library. If you like the idea of using the -bt flag to get a random artist/album from within a certain directory, define them here with the shortcodes you'd like to use to refer to them. (Note that full-collection randomness will still only use the dirs defined here.)
-
-If you prefer all your randomness to be across the full collection, simply empty this array. (just leave "array()")
-
 Usage:
 
-    DJ Thread's MPC Tool, v0.6
+    DJ Thread's MPC Tool, v0.7
 
     Subjects (You need one of these):
      -rt, --random-tracks  Use random tracks 
@@ -96,7 +111,6 @@ Usage:
     Action Overrides (Default is to replace MPD playlist and hit play):
      -l,  --list           List only mode
      -s,  --simple         Simple list only mode
-     -b,  --deadbeef       Add to deadbeef
      -x,  --execute        Execute the argument for each result. X is replaced with
                            the absolute location. eg. -x 'cp -av X /mnt/hdd'
      -w,  --raw            The rest of the command line will go straight to mpc
@@ -123,7 +137,7 @@ Usage:
 Web Interface!
 --------------
 
-Yeah, there is a jQuery Mobile web interface for this. Simply make the files in the web/ directory web accessible and configure a couple things atop index.php !
+Yeah, there is a jQuery Mobile web interface. Simply make the files in the web/ directory web accessible and configure a couple things atop index.php !
 
 ![jQuery Mobile Web Interface](https://github.com/djthread/mpct/blob/master/Web%20UI%20Screenshot.png?raw=true)
 
@@ -135,9 +149,8 @@ Appendix of Parameters
                                 //   can be: latest, search, randomTracks, randomAlbums
                                 //   or playThisAlbum.
                                 //   Also valid but less useful are: raw, aliases
-        'action'     => 'mpc',  // 'mpc' to add to mpd, 'deadbeef' to send it there,
-                                //   exe to execute cmds, or 'list' to simply list the
-                                //   hits
+        'action'     => 'mpc',  // 'mpc' to add to mpd, 'exe' to execute cmds, or 'list'
+                                //   to simply list the hits
 
         'host'       => null,   // override the host default/environment
         'port'       => null,   // override the host default/environment
@@ -163,7 +176,7 @@ Appendix of Parameters
         // latest-mode params
         'latestRoot' => '/storage/music/tmp/stage2',  // root dir for latest music
         'mpdRoot'    => '/storage/music',             // root dir of mpd
-        'deep'       => 2,                            // how many dirs deep to look
+        'deep'       => 1,                            // how many dirs deep to look
 
         // override if you must...
         'defNumTrks' => 10,    // default num for --random-tracks
