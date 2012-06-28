@@ -278,7 +278,8 @@ class MPCWorker
                 break;
             case '--raw': case '-w': case 'w':
                 $params['func'] = 'raw';
-                $params['rawCmd'] = implode(' ', $myargs);
+				$myargs = array_map(function($a) { return str_replace("'", "\\'", $a); }, $myargs);
+                $params['rawCmd'] = "'" . implode("' '", $myargs) . "'";
                 $myargs = array();  // all done!
                 break;
             case '--latest': case '-la': case 'la':
@@ -371,7 +372,14 @@ class MPCWorker
                 die();
                 break;
             default:
-                $this->out("What?: $arg", array('fatal' => true));
+                if ($params['func'] == 'search') {
+                    $params['search'] .= " $arg";
+                    while ($arg = array_shift($myargs)) {
+                        $params['search'] .= " $arg";
+                    }
+                } else {
+                    $this->out("What?: $arg", array('fatal' => true));
+                }
             }
         }
 
