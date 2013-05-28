@@ -119,11 +119,11 @@ class MPCWorker
     protected $rootCache = array();
 
     /**
-     * Array of albums, loaded from the cache at ~/.mpct/albumCache
+     * Array of albums, loaded from the cache at ~/.mpct.albumCache
      *
      * @var array
      */
-    protected $albumCache = array();
+    protected $albums = array();
 
     /**
      * Protected contructor. Invoke this object with runFromCLIArguments()
@@ -195,7 +195,8 @@ class MPCWorker
         }
 
         // set btRandom if nobody else did
-        $params['btRandom'] = isset($params['btRandom']) ? $params['btRandom'] : (bool)$this->toplevelMap;
+        $params['btRandom'] = isset($params['btRandom']) ? $params['btRandom'] : false;
+        // $params['btRandom'] = isset($params['btRandom']) ? $params['btRandom'] : (bool)$this->toplevelMap;
 
         // command-line params last !
         $this->params = array_merge($final, $params);
@@ -562,17 +563,12 @@ alias mr='$self --raw'
      */
     public function getRandomTrack()
     {
-        $albums = $this->albumCache ?: ($this->albumCache = $this->mpc('list album'));
-        $album  = null;
-
-        if (!$albums) {
-            $this->out('Failed to find any albums via "mpc list album" ?',
-                array('fatal' => true));
-        }
+        $this->loadAlbums();
+        $album = null;
 
         do {
             do {
-                $album = $albums[rand(0, count($albums) - 1)];
+                $album = $this->albums[rand(0, count($this->albums) - 1)];
             } while (!$album);
 
             $files = $this->mpc('find album "' . $this->quotefix($album) . '"');
@@ -1243,5 +1239,34 @@ alias mr='$self --raw'
     protected function pSet($key, $val)
     {
         $this->params[$key] = $val;
+    }
+
+    /**
+     * Check cache file. Use it if it's not old. Otherwise, pull from mpc.
+     *
+     * This function fills $this->albums or throws an exception
+     *
+     * @return null
+     */
+    protected function loadAlbums()
+    {
+        if ($this->albums) {
+            return;
+        }
+
+        $cacheFile    = $_ENV['HOME'] . '/.mpct.albumCache';
+        $this->albums = @file($cacheFile, FILE_IGNORE_NEW_LINES);
+
+        if (!$this->albums) {
+            $this->albums = $this->mpc('list album');
+            if ($this->albums) {
+                file_put_contents($cacheFile, implode("\n", $this->albums));
+            }
+        }
+
+        if (!$this->albums) {
+            $this->out('Failed to find any albums via "mpc list album" ?',
+                array('fatal' => true));
+        }
     }
 }
