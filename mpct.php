@@ -1254,7 +1254,7 @@ alias mr='$self --raw'
             return;
         }
 
-        $cacheFile    = $_ENV['HOME'] . '/.mpct.albumCache';
+        $cacheFile    = $_SERVER['HOME'] . '/.mpct.albumCache';
         $this->albums = @file($cacheFile, FILE_IGNORE_NEW_LINES);
 
         if (!$this->albums) {
