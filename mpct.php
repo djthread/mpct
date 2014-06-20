@@ -194,9 +194,14 @@ class MPCWorker
             }
         }
 
-        // set btRandom if nobody else did
-        $params['btRandom'] = isset($params['btRandom']) ? $params['btRandom'] : false;
+        // set btRandom if nobody else did - (ugh. i don't like how this project is going. 2014/06/20)
+        // $params['btRandom'] = isset($params['btRandom']) ? $params['btRandom'] : false;
         // $params['btRandom'] = isset($params['btRandom']) ? $params['btRandom'] : (bool)$this->toplevelMap;
+        if (!isset($params['btRandom'])) {
+            $params['btRandom'] = isset($params['bt'])
+                && $params['bt']
+                && preg_match('/^random/', $params['func']);
+        }
 
         // command-line params last !
         $this->params = array_merge($final, $params);
