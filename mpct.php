@@ -167,6 +167,10 @@ class MPCWorker
             }
         } else $myargs = $argv;
 
+        // Use fish's universal MPD_HOST, if defined
+        $fishHost = trim(exec('fish -c "echo \$MPD_HOST"'));
+        if ($fishHost) $p['host'] = $fishHost;
+
         $params = array_merge($params, $this->parseArguments($myargs));
 
         // building the final parameter array ...
